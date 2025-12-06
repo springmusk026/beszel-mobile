@@ -353,120 +353,229 @@ class _SystemsScreenState extends State<SystemsScreen> {
         }
         final offset = _shouldShowAlertsSection ? 1 : 0;
         final s = filtered[index - offset];
-        final cpu = (s.info['cpu'] ?? 0).toString();
-        final memPercent = (s.info['mp'] ?? 0).toString();
-        final diskPercent = (s.info['dp'] ?? 0).toString();
+        final theme = Theme.of(context);
         final statusColor = _statusColor(s.status, context);
+        final statusTextColor = _statusLabelTextColor(statusColor);
+        final cpuPercent = _percent(s.info['cpu']);
+        final memPercent = _percent(s.info['mp']);
+        final diskPercent = _percent(s.info['dp']);
+        final netIn = _num(s.info['nr'] ?? s.info['net_in']).toDouble();
+        final netOut = _num(s.info['ns'] ?? s.info['net_out']).toDouble();
+        final diskRead = _num(s.info['dr'] ?? s.info['disk_read']).toDouble();
+        final diskWrite = _num(s.info['dw'] ?? s.info['disk_write']).toDouble();
+
+        int containersTotal = 0;
+        int containersRunning = 0;
+        final containersData = s.info['containers'] ?? s.info['container_count'] ?? s.info['containers_count'];
+        if (containersData is Map) {
+          containersTotal = _num(containersData['total'] ?? containersData['all'] ?? containersData['count']).toInt();
+          containersRunning = _num(containersData['running'] ?? containersData['active'] ?? containersData['up']).toInt();
+          if (containersTotal == 0 && containersData['items'] is List) {
+            final items = containersData['items'] as List;
+            containersTotal = items.length;
+            containersRunning = items.where((item) {
+              if (item is Map) {
+                final status = item['status']?.toString().toLowerCase();
+                return status == 'running' || status == 'online';
+              }
+              return false;
+            }).length;
+          }
+        } else if (containersData is List) {
+          containersTotal = containersData.length;
+        } else if (containersData != null) {
+          containersTotal = _num(containersData).toInt();
+        }
+
+        final infoPills = <Widget>[];
+        if (netIn > 0) {
+          infoPills.add(_InfoPill(
+            icon: Icons.cloud_download_outlined,
+            label: 'Inbound',
+            value: _formatRate(netIn),
+            color: Colors.indigo,
+          ));
+        }
+        if (netOut > 0) {
+          infoPills.add(_InfoPill(
+            icon: Icons.cloud_upload_outlined,
+            label: 'Outbound',
+            value: _formatRate(netOut),
+            color: Colors.teal,
+          ));
+        }
+        if (diskRead > 0) {
+          infoPills.add(_InfoPill(
+            icon: Icons.sd_card_outlined,
+            label: 'Disk read',
+            value: _formatRate(diskRead),
+            color: Colors.deepOrange,
+          ));
+        }
+        if (diskWrite > 0) {
+          infoPills.add(_InfoPill(
+            icon: Icons.save_alt_outlined,
+            label: 'Disk write',
+            value: _formatRate(diskWrite),
+            color: Colors.purple,
+          ));
+        }
+        if (containersTotal > 0) {
+          final runningLabel = containersRunning > 0 ? '$containersRunning running · ' : '';
+          infoPills.add(_InfoPill(
+            icon: Icons.dns_outlined,
+            label: 'Containers',
+            value: '$runningLabel$containersTotal total',
+            color: Colors.blueGrey,
+          ));
+        }
+
         return Card(
-          child: ListTile(
-            leading: CircleAvatar(
-              backgroundColor: statusColor,
-              child: const Icon(Icons.computer, color: Colors.white),
-            ),
-            title: Text(s.name, style: const TextStyle(fontWeight: FontWeight.w600)),
-            subtitle: Padding(
-              padding: const EdgeInsets.only(top: 4),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          elevation: 0,
+          clipBehavior: Clip.antiAlias,
+          child: InkWell(
+            borderRadius: BorderRadius.circular(16),
+            onTap: () => Navigator.of(context).pushNamed('/system', arguments: s),
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 280),
+              padding: const EdgeInsets.all(20),
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(16),
+                gradient: LinearGradient(
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                  colors: [
+                    statusColor.withOpacity(0.14),
+                    theme.colorScheme.surfaceVariant.withOpacity(0.05),
+                  ],
+                ),
+                border: Border.all(color: statusColor.withOpacity(0.18)),
+              ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text('${s.host}:${s.port}'),
-                  const SizedBox(height: 4),
-                  Wrap(
-                    spacing: 12,
-                    runSpacing: 6,
-                    crossAxisAlignment: WrapCrossAlignment.center,
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          const Icon(Icons.speed, size: 14),
-                          const SizedBox(width: 4),
-                          Text('CPU $cpu%'),
-                        ],
+                      _StatusPulse(color: statusColor),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              s.name,
+                              style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700),
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              '${s.host}:${s.port}',
+                              style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+                            ),
+                          ],
+                        ),
                       ),
-                      Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          const Icon(Icons.memory, size: 14),
-                          const SizedBox(width: 4),
-                          Text('MEM $memPercent%'),
-                        ],
+                      _StatusLabel(
+                        label: s.status.toUpperCase(),
+                        background: statusColor.withOpacity(0.2),
+                        foreground: statusTextColor,
+                        borderColor: statusColor.withOpacity(0.4),
                       ),
-                      Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          const Icon(Icons.storage, size: 14),
-                          const SizedBox(width: 4),
-                          Text('DISK $diskPercent%'),
+                      PopupMenuButton<String>(
+                        icon: const Icon(Icons.more_vert),
+                        onSelected: (value) async {
+                          switch (value) {
+                            case 'edit':
+                              final result = await Navigator.of(context).pushNamed('/add-system', arguments: s);
+                              if (result == true) {
+                                setState(() {
+                                  _future = _systemsService.fetchAll();
+                                });
+                              }
+                              break;
+                            case 'pause':
+                            case 'resume':
+                              await _pauseResumeSystem(s);
+                              break;
+                            case 'copy_name':
+                              _copyToClipboard(s.name, 'System name');
+                              break;
+                            case 'copy_host':
+                              _copyToClipboard('${s.host}:${s.port}', 'Host');
+                              break;
+                            case 'delete':
+                              await _deleteSystem(s);
+                              break;
+                          }
+                        },
+                        itemBuilder: (context) => [
+                          const PopupMenuItem(value: 'edit', child: Row(children: [Icon(Icons.edit, size: 18), SizedBox(width: 8), Text('Edit')])),
+                          PopupMenuItem(
+                            value: s.status == 'paused' ? 'resume' : 'pause',
+                            child: Row(
+                              children: [
+                                Icon(s.status == 'paused' ? Icons.play_circle : Icons.pause_circle, size: 18),
+                                const SizedBox(width: 8),
+                                Text(s.status == 'paused' ? 'Resume' : 'Pause'),
+                              ],
+                            ),
+                          ),
+                          const PopupMenuItem(value: 'copy_name', child: Row(children: [Icon(Icons.copy, size: 18), SizedBox(width: 8), Text('Copy name')])),
+                          const PopupMenuItem(value: 'copy_host', child: Row(children: [Icon(Icons.copy, size: 18), SizedBox(width: 8), Text('Copy host')])),
+                          const PopupMenuItem(
+                            value: 'delete',
+                            child: Row(children: [Icon(Icons.delete, size: 18, color: Colors.red), SizedBox(width: 8), Text('Delete', style: TextStyle(color: Colors.red))]),
+                          ),
                         ],
                       ),
                     ],
                   ),
+                  const SizedBox(height: 18),
+                  Wrap(
+                    spacing: 16,
+                    runSpacing: 16,
+                    children: [
+                      ConstrainedBox(
+                        constraints: const BoxConstraints(minWidth: 160, maxWidth: 280),
+                        child: _MetricGauge(
+                          icon: Icons.speed,
+                          color: Colors.deepOrangeAccent,
+                          label: 'CPU usage',
+                          value: cpuPercent,
+                        ),
+                      ),
+                      ConstrainedBox(
+                        constraints: const BoxConstraints(minWidth: 160, maxWidth: 280),
+                        child: _MetricGauge(
+                          icon: Icons.memory,
+                          color: Colors.blueAccent,
+                          label: 'Memory usage',
+                          value: memPercent,
+                        ),
+                      ),
+                      ConstrainedBox(
+                        constraints: const BoxConstraints(minWidth: 160, maxWidth: 280),
+                        child: _MetricGauge(
+                          icon: Icons.storage,
+                          color: Colors.teal,
+                          label: 'Disk usage',
+                          value: diskPercent,
+                        ),
+                      ),
+                    ],
+                  ),
+                  if (infoPills.isNotEmpty) ...[
+                    const SizedBox(height: 16),
+                    Wrap(
+                      spacing: 12,
+                      runSpacing: 12,
+                      children: infoPills,
+                    ),
+                  ],
                 ],
               ),
             ),
-            trailing: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Chip(
-                  label: Text(s.status.toUpperCase()),
-                  labelStyle: TextStyle(
-                    color: Theme.of(context).colorScheme.onPrimary,
-                    fontWeight: FontWeight.w600,
-                    letterSpacing: .5,
-                  ),
-                  backgroundColor: statusColor,
-                ),
-                PopupMenuButton<String>(
-                  icon: const Icon(Icons.more_vert),
-                  onSelected: (value) async {
-                    switch (value) {
-                      case 'edit':
-                        final result = await Navigator.of(context).pushNamed('/add-system', arguments: s);
-                        if (result == true) {
-                          setState(() {
-                            _future = _systemsService.fetchAll();
-                          });
-                        }
-                        break;
-                      case 'pause':
-                      case 'resume':
-                        await _pauseResumeSystem(s);
-                        break;
-                      case 'copy_name':
-                        _copyToClipboard(s.name, 'System name');
-                        break;
-                      case 'copy_host':
-                        _copyToClipboard('${s.host}:${s.port}', 'Host');
-                        break;
-                      case 'delete':
-                        await _deleteSystem(s);
-                        break;
-                    }
-                  },
-                  itemBuilder: (context) => [
-                    const PopupMenuItem(value: 'edit', child: Row(children: [Icon(Icons.edit, size: 18), SizedBox(width: 8), Text('Edit')])),
-                    PopupMenuItem(
-                      value: s.status == 'paused' ? 'resume' : 'pause',
-                      child: Row(
-                        children: [
-                          Icon(s.status == 'paused' ? Icons.play_circle : Icons.pause_circle, size: 18),
-                          const SizedBox(width: 8),
-                          Text(s.status == 'paused' ? 'Resume' : 'Pause'),
-                        ],
-                      ),
-                    ),
-                    const PopupMenuItem(value: 'copy_name', child: Row(children: [Icon(Icons.copy, size: 18), SizedBox(width: 8), Text('Copy name')])),
-                    const PopupMenuItem(value: 'copy_host', child: Row(children: [Icon(Icons.copy, size: 18), SizedBox(width: 8), Text('Copy host')])),
-                    const PopupMenuItem(
-                      value: 'delete',
-                      child: Row(children: [Icon(Icons.delete, size: 18, color: Colors.red), SizedBox(width: 8), Text('Delete', style: TextStyle(color: Colors.red))]),
-                    ),
-                  ],
-                ),
-              ],
-            ),
-            onTap: () => Navigator.of(context).pushNamed('/system', arguments: s),
           ),
         );
       },
@@ -641,6 +750,29 @@ class _SystemsScreenState extends State<SystemsScreen> {
     );
   }
 
+  double _percent(dynamic value) {
+    final doubleValue = _num(value).toDouble();
+    if (!doubleValue.isFinite || doubleValue.isNaN) {
+      return 0;
+    }
+    return doubleValue.clamp(0, 100).toDouble();
+  }
+
+  String _formatRate(double value) {
+    final magnitude = value.abs();
+    if (magnitude >= 1024) {
+      return '${(magnitude / 1024).toStringAsFixed(1)} GB/s';
+    }
+    if (magnitude >= 1) {
+      return '${magnitude.toStringAsFixed(1)} MB/s';
+    }
+    return '${(magnitude * 1024).toStringAsFixed(0)} KB/s';
+  }
+
+  Color _statusLabelTextColor(Color base) {
+    return base.computeLuminance() > 0.45 ? Colors.black87 : Colors.white;
+  }
+
   Color _statusColor(String status, BuildContext context) {
     switch (status) {
       case 'up':
@@ -676,7 +808,168 @@ class _SystemsScreenState extends State<SystemsScreen> {
     if (v is String) return num.tryParse(v) ?? 0;
     return 0;
   }
+}
 
+class _StatusPulse extends StatelessWidget {
+  const _StatusPulse({required this.color});
+
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      height: 16,
+      width: 16,
+      decoration: BoxDecoration(
+        shape: BoxShape.circle,
+        color: color,
+        boxShadow: [
+          BoxShadow(
+            color: color.withOpacity(0.45),
+            blurRadius: 16,
+            spreadRadius: 2,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _StatusLabel extends StatelessWidget {
+  const _StatusLabel({
+    required this.label,
+    required this.background,
+    required this.foreground,
+    required this.borderColor,
+  });
+
+  final String label;
+  final Color background;
+  final Color foreground;
+  final Color borderColor;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      margin: const EdgeInsets.only(right: 8),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+      decoration: BoxDecoration(
+        color: background,
+        borderRadius: BorderRadius.circular(999),
+        border: Border.all(color: borderColor, width: 1),
+      ),
+      child: Text(
+        label,
+        style: Theme.of(context).textTheme.labelSmall?.copyWith(
+              color: foreground,
+              fontWeight: FontWeight.w700,
+              letterSpacing: 0.6,
+            ),
+      ),
+    );
+  }
+}
+
+class _MetricGauge extends StatelessWidget {
+  const _MetricGauge({
+    required this.icon,
+    required this.color,
+    required this.label,
+    required this.value,
+  });
+
+  final IconData icon;
+  final Color color;
+  final String label;
+  final double value;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final target = value.clamp(0, 100);
+    return TweenAnimationBuilder<double>(
+      duration: const Duration(milliseconds: 420),
+      tween: Tween<double>(begin: 0, end: target.toDouble()),
+      curve: Curves.easeOutCubic,
+      builder: (context, animated, _) {
+        final progress = (animated / 100).clamp(0.0, 1.0);
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(icon, size: 18, color: color),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    label,
+                    style: theme.textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w600),
+                  ),
+                ),
+                Text(
+                  '${animated.toStringAsFixed(0)}%',
+                  style: theme.textTheme.bodySmall?.copyWith(fontWeight: FontWeight.w600),
+                ),
+              ],
+            ),
+            const SizedBox(height: 6),
+            ClipRRect(
+              borderRadius: BorderRadius.circular(6),
+              child: LinearProgressIndicator(
+                value: progress,
+                minHeight: 6,
+                color: color,
+                backgroundColor: color.withOpacity(0.18),
+              ),
+            ),
+          ],
+        );
+      },
+    );
+  }
+}
+
+class _InfoPill extends StatelessWidget {
+  const _InfoPill({
+    required this.icon,
+    required this.label,
+    required this.value,
+    required this.color,
+  });
+
+  final IconData icon;
+  final String label;
+  final String value;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+      decoration: BoxDecoration(
+        color: color.withOpacity(0.08),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: color.withOpacity(0.25)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 16, color: color),
+          const SizedBox(width: 8),
+          Text(
+            label,
+            style: theme.textTheme.bodySmall?.copyWith(fontWeight: FontWeight.w600, color: color),
+          ),
+          const SizedBox(width: 6),
+          Text(
+            value,
+            style: theme.textTheme.bodySmall,
+          ),
+        ],
+      ),
+    );
+  }
 }
 
 

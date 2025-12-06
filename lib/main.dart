@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'screens/login_screen.dart';
 import 'screens/systems_screen.dart';
 import 'screens/system_details_screen.dart';
+import 'screens/home_overview_screen.dart';
 import 'screens/settings_screen.dart';
 import 'screens/alerts_screen.dart';
 import 'screens/containers_screen.dart';
@@ -181,6 +182,7 @@ class _HomeShellState extends State<HomeShell> {
   int _index = 0;
 
   final List<Widget> _pages = const [
+    HomeOverviewScreen(),
     SystemsScreen(),
     AlertsScreen(),
     SettingsScreen(),
@@ -194,6 +196,7 @@ class _HomeShellState extends State<HomeShell> {
         selectedIndex: _index,
         onDestinationSelected: (i) => setState(() => _index = i),
         destinations: const [
+          NavigationDestination(icon: Icon(Icons.dashboard_outlined), selectedIcon: Icon(Icons.dashboard), label: 'Home'),
           NavigationDestination(icon: Icon(Icons.computer_outlined), selectedIcon: Icon(Icons.computer), label: 'Systems'),
           NavigationDestination(icon: Icon(Icons.notifications_outlined), selectedIcon: Icon(Icons.notifications), label: 'Alerts'),
           NavigationDestination(icon: Icon(Icons.settings_outlined), selectedIcon: Icon(Icons.settings), label: 'Settings'),
