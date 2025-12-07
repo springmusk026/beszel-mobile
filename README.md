@@ -1,180 +1,378 @@
-<p align="center">
-  <img src="assets/icon/app_logo.png" width="120" alt="Beszel Mobile Logo">
-</p>
+# Beszel Mobile
 
-<h1 align="center">Beszel Mobile</h1>
+A cross-platform mobile client for [Beszel](https://github.com/henrygd/beszel), the lightweight server monitoring platform. Built with Flutter for native performance on Android, iOS, and desktop.
 
-<p align="center">
-  <strong>A lightweight, real-time server monitoring companion for <a href="https://github.com/henrygd/beszel">Beszel</a></strong>
-</p>
-
-<p align="center">
-  <a href="https://flutter.dev"><img src="https://img.shields.io/badge/Flutter-3.19+-02569B?logo=flutter" alt="Flutter"></a>
-  <a href="https://dart.dev"><img src="https://img.shields.io/badge/Dart-3.0+-0175C2?logo=dart" alt="Dart"></a>
-  <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-green.svg" alt="License"></a>
-</p>
-
-<p align="center">
-  <a href="#features">Features</a> •
-  <a href="#screenshots">Screenshots</a> •
-  <a href="#installation">Installation</a> •
-  <a href="#building">Building</a> •
-  <a href="#architecture">Architecture</a> •
-  <a href="#contributing">Contributing</a>
-</p>
-
----
+[![Flutter](https://img.shields.io/badge/Flutter-3.19+-02569B?logo=flutter&logoColor=white)](https://flutter.dev)
+[![License](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
 ## Overview
 
-Beszel Mobile is a cross-platform Flutter application that provides real-time monitoring of your server infrastructure through the [Beszel](https://github.com/henrygd/beszel) backend. Monitor CPU, memory, disk usage, network throughput, and Docker containers—all from your mobile device.
+Beszel Mobile provides real-time visibility into your server infrastructure through an intuitive mobile interface. The app connects to your self-hosted Beszel instance via PocketBase, delivering live metrics, alerts, and container status directly to your device.
 
-## Features
+### Key Capabilities
 
-- **Real-time Monitoring** — Live updates via WebSocket subscriptions
-- **Fleet Dashboard** — At-a-glance health status of your entire infrastructure
-- **System Details** — Deep dive into individual server metrics with historical charts
-- **Container Management** — Monitor Docker containers with CPU, memory, and network stats
-- **Alert System** — View and manage active alerts across your fleet
-- **Dark/Light Theme** — Adaptive theming with smooth transitions
-- **Offline Support** — Cached data for offline viewing
-- **Cross-Platform** — Android, iOS, Web, macOS, Windows, Linux
+- Real-time system metrics via WebSocket subscriptions
+- Fleet-wide health monitoring dashboard
+- Per-system detailed analytics with historical charts
+- Docker container monitoring and status tracking
+- Alert management with threshold configuration
+- Offline data caching for intermittent connectivity
 
-## Screenshots
+## System Requirements
 
-<!-- Add your screenshots here -->
-<!-- 
-<p align="center">
-  <img src="screenshots/dashboard.png" width="200">
-  <img src="screenshots/systems.png" width="200">
-  <img src="screenshots/details.png" width="200">
-  <img src="screenshots/containers.png" width="200">
-</p>
--->
+| Platform | Minimum Version |
+|----------|-----------------|
+| Android | API 21 (5.0 Lollipop) |
+| iOS | 12.0 |
+| macOS | 10.14 Mojave |
+| Windows | 10 (1903) |
+| Linux | Ubuntu 18.04 / equivalent |
 
-## Installation
+**Backend:** Beszel server instance (any recent version)
 
-### Prerequisites
+## Application Screens
 
-- [Flutter SDK](https://docs.flutter.dev/get-started/install) 3.19+
-- A running [Beszel](https://github.com/henrygd/beszel) instance
+### Dashboard
+The home screen provides fleet-wide visibility with a health indicator showing the percentage of online systems, summary statistics (total, online, down, paused), aggregated network and disk I/O metrics, top CPU consumers, and active alerts requiring attention.
 
-### Quick Start
+### Systems List
+Displays all monitored systems with real-time status. Features include search and filtering by status, sorting by name/status/CPU/memory/disk, inline metric bars for quick assessment, and visual indicators for systems with active alerts.
+
+### System Details
+Deep-dive view for individual systems showing circular gauge visualizations for CPU, memory, disk, and swap usage, network throughput (in/out) and disk I/O rates, environment data (load average, temperatures, battery), and interactive time-series charts with configurable ranges (1 minute to 30 days).
+
+### Containers
+Docker container monitoring per system with container status (running, stopped, health state), per-container resource usage, and search and status filtering.
+
+### Alerts
+Alert management interface showing active alerts across the fleet, alert history and resolution tracking, and per-system alert configuration.
+
+### Settings
+Application configuration including server connection management, theme selection (light, dark, system), and notification preferences.
+
+## Architecture
+
+### High-Level Design
+
+```
+┌─────────────────────────────────────────────────────────────────────────┐
+│                           Beszel Mobile App                              │
+├─────────────────────────────────────────────────────────────────────────┤
+│  Presentation Layer                                                      │
+│  ┌─────────────┐ ┌─────────────┐ ┌─────────────┐ ┌─────────────┐       │
+│  │  Dashboard  │ │   Systems   │ │   Details   │ │ Containers  │       │
+│  └──────┬──────┘ └──────┬──────┘ └──────┬──────┘ └──────┬──────┘       │
+│         │               │               │               │               │
+│  ┌──────┴───────────────┴───────────────┴───────────────┴──────┐       │
+│  │                    Widget Components                         │       │
+│  │  AnimatedCard │ MetricGauge │ SkeletonLoader │ SystemCharts │       │
+│  └──────────────────────────────┬───────────────────────────────┘       │
+├─────────────────────────────────┼───────────────────────────────────────┤
+│  Service Layer                  │                                        │
+│  ┌──────────────────────────────┴───────────────────────────────┐       │
+│  │ SystemsService │ AlertsService │ ContainersService │ AuthService│    │
+│  └──────────────────────────────┬───────────────────────────────┘       │
+├─────────────────────────────────┼───────────────────────────────────────┤
+│  Data Layer                     │                                        │
+│  ┌──────────────────────────────┴───────────────────────────────┐       │
+│  │              PocketBase Client (REST + WebSocket)             │       │
+│  └──────────────────────────────┬───────────────────────────────┘       │
+└─────────────────────────────────┼───────────────────────────────────────┘
+                                  │
+                                  ▼
+                    ┌─────────────────────────┐
+                    │     Beszel Server       │
+                    │  (PocketBase Backend)   │
+                    └─────────────────────────┘
+```
+
+### Data Flow
+
+```
+┌──────────────┐     HTTP/REST      ┌──────────────┐
+│              │ ─────────────────► │              │
+│    Mobile    │                    │    Beszel    │
+│     App      │ ◄───────────────── │    Server    │
+│              │     WebSocket      │              │
+└──────────────┘   (Real-time)      └──────────────┘
+
+1. Initial Load
+   App ──[GET /api/collections/systems/records]──► Server
+   App ◄──[JSON: System list with current stats]── Server
+
+2. Real-time Updates
+   App ──[Subscribe: systems/*]──► Server
+   App ◄──[Stream: Record changes]── Server (continuous)
+
+3. Historical Data
+   App ──[GET /api/collections/system_stats/records?filter=...]──► Server
+   App ◄──[JSON: Time-series data for charts]── Server
+```
+
+### State Management
+
+The application uses a service-based architecture with reactive streams:
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                        UI Layer                              │
+│  StreamBuilder<List<SystemRecord>>                          │
+│       │                                                      │
+│       ▼                                                      │
+│  ┌─────────────────────────────────────────────────────┐    │
+│  │              SystemsService                          │    │
+│  │  ┌─────────────┐    ┌─────────────────────────┐     │    │
+│  │  │   Stream    │◄───│  StreamController       │     │    │
+│  │  │  (output)   │    │  (broadcast)            │     │    │
+│  │  └─────────────┘    └───────────┬─────────────┘     │    │
+│  │                                 │                    │    │
+│  │  ┌─────────────────────────────┴─────────────┐     │    │
+│  │  │         PocketBase Subscription           │     │    │
+│  │  │  pb.collection('systems').subscribe(...)  │     │    │
+│  │  └───────────────────────────────────────────┘     │    │
+│  └─────────────────────────────────────────────────────┘    │
+└─────────────────────────────────────────────────────────────┘
+```
+
+### Project Structure
+
+```
+lib/
+├── api/
+│   └── pb_client.dart              # PocketBase client singleton
+│
+├── animations/
+│   ├── app_curves.dart             # Easing curve definitions
+│   ├── app_durations.dart          # Animation timing constants
+│   ├── dialog_transitions.dart     # Modal/dialog animations
+│   ├── page_transitions.dart       # Screen navigation transitions
+│   └── staggered_animation_mixin.dart  # List item stagger effect
+│
+├── models/
+│   ├── system_record.dart          # System data model
+│   └── user_settings.dart          # User preferences model
+│
+├── navigation/
+│   └── animated_navigation_bar.dart    # Bottom navigation with animations
+│
+├── screens/
+│   ├── home_overview_screen.dart   # Dashboard
+│   ├── systems_screen.dart         # Systems list
+│   ├── system_details_screen.dart  # Individual system view
+│   ├── containers_screen.dart      # Container list per system
+│   ├── container_details_screen.dart
+│   ├── alerts_screen.dart          # Alert history
+│   ├── manage_alerts_screen.dart   # Alert configuration
+│   ├── login_screen.dart           # Authentication
+│   ├── settings_screen.dart        # App settings
+│   └── ...
+│
+├── services/
+│   ├── auth_service.dart           # Authentication logic
+│   ├── systems_service.dart        # System data + subscriptions
+│   ├── system_stats_service.dart   # Historical metrics
+│   ├── alerts_service.dart         # Alert management
+│   ├── containers_service.dart     # Container data
+│   └── settings_service.dart       # User preferences persistence
+│
+├── theme/
+│   ├── app_colors.dart             # Color palette (light/dark)
+│   ├── app_spacing.dart            # Spacing scale
+│   ├── app_radius.dart             # Border radius tokens
+│   ├── app_typography.dart         # Text styles
+│   └── theme_controller.dart       # Theme state management
+│
+├── widgets/
+│   ├── animated_card.dart          # Tap-feedback card
+│   ├── animated_metric_gauge.dart  # Animated progress indicator
+│   ├── skeleton_loader.dart        # Loading placeholder
+│   ├── empty_state.dart            # Empty content placeholder
+│   ├── loading_state.dart          # Loading/error wrapper
+│   └── system_charts.dart          # Time-series chart components
+│
+└── main.dart                       # Application entry point
+```
+
+### Design System
+
+The application implements a token-based design system for visual consistency:
+
+**Spacing Scale**
+```
+xs: 4dp   sm: 8dp   md: 12dp   lg: 16dp   xl: 24dp   xxl: 32dp
+```
+
+**Border Radius**
+```
+small: 8dp   medium: 12dp   large: 16dp   extraLarge: 24dp
+```
+
+**Animation Durations**
+```
+instant: 100ms   fast: 150ms   normal: 200ms   medium: 300ms   slow: 400ms   chart: 600ms
+```
+
+**Status Colors**
+```
+success: #22C55E (green)    warning: #F59E0B (amber)
+error: #EF4444 (red)        inactive: #9CA3AF (gray)
+```
+
+### Component Hierarchy
+
+```
+App
+├── MaterialApp
+│   └── ThemeController (InheritedWidget)
+│       └── Navigator
+│           ├── LoginScreen
+│           └── HomeShell (authenticated)
+│               ├── AnimatedNavigationBar
+│               └── IndexedStack
+│                   ├── HomeOverviewScreen
+│                   │   ├── HealthBar
+│                   │   ├── SummaryGrid
+│                   │   ├── FleetInsights
+│                   │   ├── TopSystemsSection
+│                   │   └── ActiveAlertsSection
+│                   ├── SystemsScreen
+│                   │   ├── SearchBar
+│                   │   ├── FilterChips
+│                   │   └── SystemCard (list)
+│                   ├── AlertsScreen
+│                   └── SettingsScreen
+```
+
+## User Flow
+
+```
+                                    ┌─────────────┐
+                                    │   Launch    │
+                                    └──────┬──────┘
+                                           │
+                                           ▼
+                              ┌────────────────────────┐
+                              │  Check Authentication  │
+                              └───────────┬────────────┘
+                                          │
+                         ┌────────────────┴────────────────┐
+                         │                                 │
+                         ▼                                 ▼
+                  ┌─────────────┐                  ┌─────────────┐
+                  │ Login Screen│                  │  Dashboard  │
+                  └──────┬──────┘                  └──────┬──────┘
+                         │                                │
+                         │ credentials                    │
+                         ▼                                │
+                  ┌─────────────┐                         │
+                  │  Validate   │                         │
+                  └──────┬──────┘                         │
+                         │                                │
+                         └────────────────────────────────┤
+                                                          │
+                    ┌─────────────────────────────────────┼─────────────────────────────────────┐
+                    │                                     │                                     │
+                    ▼                                     ▼                                     ▼
+             ┌─────────────┐                       ┌─────────────┐                       ┌─────────────┐
+             │   Systems   │                       │   Alerts    │                       │  Settings   │
+             └──────┬──────┘                       └─────────────┘                       └─────────────┘
+                    │
+                    │ select system
+                    ▼
+             ┌─────────────┐
+             │   Details   │
+             └──────┬──────┘
+                    │
+       ┌────────────┼────────────┐
+       │            │            │
+       ▼            ▼            ▼
+┌───────────┐ ┌───────────┐ ┌───────────┐
+│Containers │ │  systemd  │ │  S.M.A.R.T│
+└───────────┘ └───────────┘ └───────────┘
+```
+
+## Build Instructions
+
+### Development Setup
 
 ```bash
-# Clone the repository
+# Clone repository
 git clone https://github.com/springmusk026/beszel-mobile.git
 cd beszel-mobile
 
 # Install dependencies
 flutter pub get
 
-# Run the app
+# Verify setup
+flutter doctor
+
+# Run in debug mode
 flutter run
 ```
 
-## Building
+### Production Builds
 
-### Android
-
+**Android APK**
 ```bash
 flutter build apk --release
 # Output: build/app/outputs/flutter-apk/app-release.apk
 ```
 
-### iOS
-
+**Android App Bundle (Play Store)**
 ```bash
-flutter build ios --release
-# Then archive via Xcode
+flutter build appbundle --release
+# Output: build/app/outputs/bundle/release/app-release.aab
 ```
 
-### Web
+**iOS**
+```bash
+flutter build ios --release
+# Open Xcode for archive and distribution
+open ios/Runner.xcworkspace
+```
 
+**Web**
 ```bash
 flutter build web --release
 # Output: build/web/
 ```
 
-## Architecture
-
+**Desktop**
+```bash
+flutter build macos --release
+flutter build windows --release
+flutter build linux --release
 ```
-lib/
-├── api/                    # API client (PocketBase)
-├── animations/             # Animation utilities & transitions
-│   ├── app_curves.dart
-│   ├── app_durations.dart
-│   ├── dialog_transitions.dart
-│   ├── page_transitions.dart
-│   └── staggered_animation_mixin.dart
-├── models/                 # Data models
-├── navigation/             # Navigation components
-├── screens/                # UI screens
-│   ├── home_overview_screen.dart
-│   ├── systems_screen.dart
-│   ├── system_details_screen.dart
-│   ├── containers_screen.dart
-│   └── ...
-├── services/               # Business logic & data services
-├── theme/                  # Design system tokens
-│   ├── app_colors.dart
-│   ├── app_radius.dart
-│   ├── app_spacing.dart
-│   └── app_typography.dart
-├── widgets/                # Reusable UI components
-└── main.dart
-```
-
-### Design System
-
-The app implements a comprehensive design system with:
-
-| Token | Purpose |
-|-------|---------|
-| `AppColors` | Semantic color palette with light/dark variants |
-| `AppSpacing` | Consistent spacing scale (4, 8, 12, 16, 24, 32) |
-| `AppRadius` | Border radius tokens (8, 12, 16, 24) |
-| `AppDurations` | Animation timing (100ms - 600ms) |
-| `AppCurves` | Easing curves for smooth animations |
-
-### Key Technologies
-
-- **Flutter** — Cross-platform UI framework
-- **PocketBase SDK** — Backend communication & real-time subscriptions
-- **fl_chart** — Beautiful, animated charts
-- **SharedPreferences** — Local settings persistence
 
 ## Configuration
 
-On first launch, enter your Beszel server URL and credentials:
+On first launch, configure the connection to your Beszel server:
 
-```
-Server URL: https://your-beszel-instance.com
-Email: your@email.com
-Password: ********
-```
+| Field | Description | Example |
+|-------|-------------|---------|
+| Server URL | Full URL to Beszel instance | `https://beszel.example.com` |
+| Email | Account email | `admin@example.com` |
+| Password | Account password | `********` |
+
+The app stores authentication tokens securely using platform-specific secure storage.
+
+## Dependencies
+
+| Package | Purpose |
+|---------|---------|
+| `pocketbase` | Backend communication and real-time subscriptions |
+| `fl_chart` | Time-series chart rendering |
+| `shared_preferences` | Local settings persistence |
 
 ## Contributing
 
-Contributions are welcome! Please read our contributing guidelines before submitting PRs.
-
-1. Fork the repository
-2. Create your feature branch (`git checkout -b feature/amazing-feature`)
-3. Commit your changes (`git commit -m 'Add amazing feature'`)
-4. Push to the branch (`git push origin feature/amazing-feature`)
-5. Open a Pull Request
-
-## Related Projects
-
-- [Beszel](https://github.com/henrygd/beszel) — The server monitoring backend
-- [Beszel Agent](https://github.com/henrygd/beszel) — Lightweight agent for collecting metrics
+See [CONTRIBUTING.md](CONTRIBUTING.md) for development guidelines and contribution process.
 
 ## License
 
-This project is licensed under the MIT License — see the [LICENSE](LICENSE) file for details.
+MIT License. See [LICENSE](LICENSE) for details.
 
----
+## Related
 
-<p align="center">
-  Made with ❤️ by <a href="https://github.com/springmusk026">springmusk026</a>
-</p>
+- [Beszel](https://github.com/henrygd/beszel) - Server monitoring backend
+- [PocketBase](https://pocketbase.io) - Backend framework used by Beszel
