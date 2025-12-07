@@ -8,6 +8,12 @@ import '../models/system_record.dart';
 import '../services/settings_service.dart' as app_settings;
 import '../services/system_stats_service.dart';
 import '../widgets/system_charts.dart';
+import '../theme/app_colors.dart';
+import '../theme/app_spacing.dart';
+import '../theme/app_radius.dart';
+import '../animations/app_durations.dart';
+import '../animations/app_curves.dart';
+import '../widgets/skeleton_loader.dart';
 
 class SystemDetailsScreen extends StatefulWidget {
   const SystemDetailsScreen({super.key, required this.system});
@@ -18,7 +24,8 @@ class SystemDetailsScreen extends StatefulWidget {
   State<SystemDetailsScreen> createState() => _SystemDetailsScreenState();
 }
 
-class _SystemDetailsScreenState extends State<SystemDetailsScreen> {
+class _SystemDetailsScreenState extends State<SystemDetailsScreen>
+    with SingleTickerProviderStateMixin {
   final _statsSvc = SystemStatsService();
   final _settingsSvc = app_settings.SettingsService();
   StreamSubscription<RecordModel?>? _statsSub;
@@ -26,12 +33,25 @@ class _SystemDetailsScreenState extends State<SystemDetailsScreen> {
   RecordModel? _latest;
   List<RecordModel> _chartRecords = const [];
   bool _chartsLoading = true;
+  bool _initialLoading = true;
   String? _chartsError;
   String _chartTime = '1h';
+
+  late AnimationController _fadeController;
+  late Animation<double> _fadeAnimation;
 
   @override
   void initState() {
     super.initState();
+    _fadeController = AnimationController(
+      vsync: this,
+      duration: AppDurations.medium,
+    );
+    _fadeAnimation = CurvedAnimation(
+      parent: _fadeController,
+      curve: AppCurves.enter,
+    );
+
     _future = _fetchLatestStats(widget.system.id);
     _statsSvc.subscribeToSystem(widget.system.id);
     _statsSub = _statsSvc.stream.listen((rec) {
@@ -53,280 +73,574 @@ class _SystemDetailsScreenState extends State<SystemDetailsScreen> {
       sort: '-created',
       fields: 'stats,created',
     );
+    if (!mounted) return null;
+    setState(() => _initialLoading = false);
+    _fadeController.forward();
     if (res.items.isEmpty) return null;
     return res.items.first;
   }
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+
     return Scaffold(
-      appBar: AppBar(
-        title: Text(widget.system.name),
-        actions: [
-          IconButton(
-            onPressed: () => Navigator.of(context).pushNamed('/containers', arguments: widget.system),
-            icon: const Icon(Icons.dns),
-            tooltip: 'Containers',
-          ),
-          IconButton(
-            onPressed: () => Navigator.of(context).pushNamed('/systemd', arguments: widget.system),
-            icon: const Icon(Icons.settings_applications),
-            tooltip: 'systemd',
-          ),
-          IconButton(
-            onPressed: () => Navigator.of(context).pushNamed('/system-alerts', arguments: widget.system),
-            icon: const Icon(Icons.notifications_active),
-            tooltip: 'Alerts history',
-          ),
-          IconButton(
-            onPressed: () => Navigator.of(context).pushNamed('/manage-alerts', arguments: widget.system),
-            icon: const Icon(Icons.settings),
-            tooltip: 'Manage alerts',
-          ),
-          IconButton(
-            onPressed: () => Navigator.of(context).pushNamed('/system-smart', arguments: widget.system),
-            icon: const Icon(Icons.sd_storage),
-            tooltip: 'S.M.A.R.T.',
-          ),
+      body: NestedScrollView(
+        headerSliverBuilder: (context, innerBoxIsScrolled) => [
+          _buildSliverAppBar(context, innerBoxIsScrolled),
         ],
-      ),
-      body: RefreshIndicator(
-        onRefresh: () async {
-          setState(() {
-            _future = _fetchLatestStats(widget.system.id);
-          });
-          await _future;
-          await _loadCharts();
-        },
-        child: FutureBuilder<RecordModel?>(
-          future: _future,
-          builder: (context, snapshot) {
-            if (snapshot.connectionState == ConnectionState.waiting && _latest == null) {
-              return const Center(child: CircularProgressIndicator());
-            }
-            if (snapshot.hasError && _latest == null) {
-              return const Center(child: Text('Failed to load stats'));
-            }
-            final record = _latest ?? snapshot.data;
-            final stats = (record?.data['stats'] as Map?)?.cast<String, dynamic>() ?? <String, dynamic>{};
-            final created = record?.data['created']?.toString();
-            final theme = Theme.of(context);
-            final statusColor = _statusColor(widget.system.status, context);
-            final statusOnColor = _statusOnColor(statusColor);
-            final cpuPercent = _percent(stats['cpu']);
-            final memPercent = _percent(stats['mp']);
-            final diskPercent = _percent(stats['dp']);
-            final swapPercent = _percent(stats['sp'] ?? stats['swap']);
-
-            final loadAverage = _formatLoad(stats);
-            final uptime = stats['uptime_human']?.toString() ?? _formatDuration(stats['uptime'] ?? stats['uptime_seconds']);
-            final temp = stats['temp'] ?? stats['temperature'];
-            final gpuTemp = stats['gpu_temp'] ?? stats['gpuTemperature'];
-            final battery = stats['battery'] ?? stats['battery_percent'];
-
-            final netSent = _num(stats['ns']).toDouble();
-            final netRecv = _num(stats['nr']).toDouble();
-            final diskRead = _num(stats['dr']).toDouble();
-            final diskWrite = _num(stats['dw']).toDouble();
-            final memUsed = _formatBytes(stats['mu'] ?? stats['memory_used']);
-            final memTotal = _formatBytes(stats['mt'] ?? stats['memory_total']);
-            final swapUsed = _formatBytes(stats['su'] ?? stats['swap_used']);
-            final swapTotal = _formatBytes(stats['st'] ?? stats['swap_total']);
-
-            final infoPills = <Widget>[];
-            if (loadAverage != '—') {
-              infoPills.add(_InfoPill(icon: Icons.timeline, label: 'Load 1/5/15', value: loadAverage, color: Colors.indigo));
-            }
-            if (uptime != null) {
-              infoPills.add(_InfoPill(icon: Icons.schedule_outlined, label: 'Uptime', value: uptime, color: Colors.blueGrey));
-            }
-            if (temp != null) {
-              infoPills.add(_InfoPill(icon: Icons.thermostat, label: 'CPU temp', value: '${temp.toString()}°C', color: Colors.deepOrange));
-            }
-            if (gpuTemp != null) {
-              infoPills.add(_InfoPill(icon: Icons.memory_outlined, label: 'GPU temp', value: '${gpuTemp.toString()}°C', color: Colors.purple));
-            }
-            if (battery != null) {
-              infoPills.add(_InfoPill(icon: Icons.battery_charging_full, label: 'Battery', value: '${_percent(battery).toStringAsFixed(0)}%', color: Colors.teal));
-            }
-
-            return ListView(
-              physics: const AlwaysScrollableScrollPhysics(),
-              padding: const EdgeInsets.all(16),
-              children: [
-                _OverviewHeader(
-                  system: widget.system,
-                  statusColor: statusColor,
-                  statusTextColor: statusOnColor,
-                  agentVersion: widget.system.version,
-                  group: widget.system.info['group']?.toString(),
-                  lastUpdated: created,
-                  uptime: uptime,
-                  memorySummary: memTotal != null && memUsed != null ? '$memUsed / $memTotal used' : null,
-                ),
-                const SizedBox(height: 16),
-                if (stats.isNotEmpty) ...[
-                  Card(
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                    child: Padding(
-                      padding: const EdgeInsets.all(20),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Row(
-                            children: [
-                              Icon(Icons.monitor_heart, color: theme.colorScheme.primary),
-                              const SizedBox(width: 8),
-                              Text('Performance', style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700)),
-                            ],
-                          ),
-                          const SizedBox(height: 20),
-                          Wrap(
-                            spacing: 20,
-                            runSpacing: 20,
-                            children: [
-                              _MetricGauge(icon: Icons.speed, color: Colors.deepOrangeAccent, label: 'CPU usage', value: cpuPercent),
-                              _MetricGauge(icon: Icons.memory, color: Colors.blueAccent, label: 'Memory usage', value: memPercent),
-                              _MetricGauge(icon: Icons.storage, color: Colors.teal, label: 'Disk usage', value: diskPercent),
-                              if (swapPercent > 0)
-                                _MetricGauge(icon: Icons.swap_vert, color: Colors.purpleAccent, label: 'Swap usage', value: swapPercent),
-                            ],
-                          ),
-                          const SizedBox(height: 16),
-                          Wrap(
-                            spacing: 16,
-                            runSpacing: 12,
-                            children: [
-                              if (memTotal != null && memUsed != null)
-                                _MiniStat(label: 'Memory', value: '$memUsed / $memTotal', icon: Icons.memory, color: Colors.blueAccent),
-                              if (swapTotal != null && swapUsed != null)
-                                _MiniStat(label: 'Swap', value: '$swapUsed / $swapTotal', icon: Icons.swap_horiz, color: Colors.purpleAccent),
-                            ],
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-                  Card(
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                    child: Padding(
-                      padding: const EdgeInsets.all(20),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Row(
-                            children: [
-                              Icon(Icons.sync_alt, color: theme.colorScheme.secondary),
-                              const SizedBox(width: 8),
-                              Text('Throughput', style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700)),
-                            ],
-                          ),
-                          const SizedBox(height: 20),
-                          Wrap(
-                            spacing: 12,
-                            runSpacing: 12,
-                            children: [
-                              _InfoPill(icon: Icons.cloud_upload_outlined, label: 'Network sent', value: _formatRate(netSent), color: Colors.teal),
-                              _InfoPill(icon: Icons.cloud_download_outlined, label: 'Network recv', value: _formatRate(netRecv), color: Colors.indigo),
-                              _InfoPill(icon: Icons.sd_card_outlined, label: 'Disk read', value: _formatRate(diskRead), color: Colors.deepOrange),
-                              _InfoPill(icon: Icons.save_alt_outlined, label: 'Disk write', value: _formatRate(diskWrite), color: Colors.purple),
-                            ],
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-                  if (infoPills.isNotEmpty)
-                    Card(
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                      child: Padding(
-                        padding: const EdgeInsets.all(20),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Row(
-                              children: [
-                                Icon(Icons.insights_outlined, color: theme.colorScheme.tertiary),
-                                const SizedBox(width: 8),
-                                Text('Environment', style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700)),
-                              ],
-                            ),
-                            const SizedBox(height: 20),
-                            Wrap(
-                              spacing: 12,
-                              runSpacing: 12,
-                              children: infoPills,
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                ] else ...[
-                  Card(
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                    child: Padding(
-                      padding: const EdgeInsets.all(20),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text('No live metrics yet', style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w600)),
-                          const SizedBox(height: 8),
-                          Text(
-                            'We have not received any telemetry for this system. Data will appear here as soon as the agent sends stats.',
-                            style: theme.textTheme.bodyMedium?.copyWith(color: theme.colorScheme.onSurfaceVariant),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                ],
-                const SizedBox(height: 20),
-                Card(
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                  child: Padding(
-                    padding: const EdgeInsets.all(20),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const Text('Chart Time', style: TextStyle(fontWeight: FontWeight.w600)),
-                        const SizedBox(height: 12),
-                        SegmentedButton<String>(
-                          segments: const [
-                            ButtonSegment(value: '1m', label: Text('1m')),
-                            ButtonSegment(value: '1h', label: Text('1h')),
-                            ButtonSegment(value: '12h', label: Text('12h')),
-                            ButtonSegment(value: '24h', label: Text('24h')),
-                            ButtonSegment(value: '1w', label: Text('1w')),
-                            ButtonSegment(value: '30d', label: Text('30d')),
-                          ],
-                          selected: {_chartTime},
-                          onSelectionChanged: (Set<String> selection) async {
-                            final newTime = selection.first;
-                            setState(() => _chartTime = newTime);
-                            await _settingsSvc.update((await _settingsSvc.fetchOrCreate()).copyWith(chartTime: newTime));
-                            await _loadCharts();
-                          },
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 20),
-                SystemCharts(
-                  records: _chartRecords,
-                  loading: _chartsLoading,
-                  error: _chartsError,
-                  onRetry: () => _loadCharts(),
-                  chartTime: _chartTime,
-                ),
-              ],
-            );
-          },
+        body: RefreshIndicator(
+          onRefresh: _handleRefresh,
+          color: colorScheme.primary,
+          child: _buildBody(context),
         ),
       ),
     );
+  }
+
+  Widget _buildSliverAppBar(BuildContext context, bool innerBoxIsScrolled) {
+    final theme = Theme.of(context);
+    final statusColor = AppColors.getStatusColor(widget.system.status);
+
+    return SliverAppBar(
+      expandedHeight: 140,
+      floating: false,
+      pinned: true,
+      elevation: innerBoxIsScrolled ? 2 : 0,
+      backgroundColor: theme.colorScheme.surface,
+      foregroundColor: theme.colorScheme.onSurface,
+      flexibleSpace: FlexibleSpaceBar(
+        titlePadding: const EdgeInsets.only(left: 56, bottom: 16, right: 16),
+        title: Text(
+          widget.system.name,
+          style: theme.textTheme.titleLarge?.copyWith(
+            fontWeight: FontWeight.w600,
+            color: theme.colorScheme.onSurface,
+          ),
+          overflow: TextOverflow.ellipsis,
+        ),
+        background: Container(
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: [
+                statusColor.withValues(alpha: 0.15),
+                theme.colorScheme.surface,
+              ],
+            ),
+          ),
+        ),
+      ),
+      actions: _buildAppBarActions(context),
+    );
+  }
+
+  List<Widget> _buildAppBarActions(BuildContext context) {
+    return [
+      _ActionButton(
+        icon: Icons.dns_outlined,
+        tooltip: 'Containers',
+        onPressed: () => Navigator.of(context).pushNamed('/containers', arguments: widget.system),
+      ),
+      _ActionButton(
+        icon: Icons.settings_applications_outlined,
+        tooltip: 'systemd',
+        onPressed: () => Navigator.of(context).pushNamed('/systemd', arguments: widget.system),
+      ),
+      _ActionButton(
+        icon: Icons.notifications_outlined,
+        tooltip: 'Alerts',
+        onPressed: () => Navigator.of(context).pushNamed('/system-alerts', arguments: widget.system),
+      ),
+      PopupMenuButton<String>(
+        icon: const Icon(Icons.more_vert),
+        tooltip: 'More options',
+        onSelected: (value) {
+          switch (value) {
+            case 'manage-alerts':
+              Navigator.of(context).pushNamed('/manage-alerts', arguments: widget.system);
+              break;
+            case 'smart':
+              Navigator.of(context).pushNamed('/system-smart', arguments: widget.system);
+              break;
+          }
+        },
+        itemBuilder: (context) => [
+          const PopupMenuItem(value: 'manage-alerts', child: Text('Manage Alerts')),
+          const PopupMenuItem(value: 'smart', child: Text('S.M.A.R.T.')),
+        ],
+      ),
+    ];
+  }
+
+  Widget _buildBody(BuildContext context) {
+    return FutureBuilder<RecordModel?>(
+      future: _future,
+      builder: (context, snapshot) {
+        if (_initialLoading) {
+          return _buildLoadingSkeleton(context);
+        }
+
+        if (snapshot.hasError && _latest == null) {
+          return _buildErrorState(context);
+        }
+
+        final record = _latest ?? snapshot.data;
+        final stats = (record?.data['stats'] as Map?)?.cast<String, dynamic>() ?? <String, dynamic>{};
+        final created = record?.data['created']?.toString();
+
+        return FadeTransition(
+          opacity: _fadeAnimation,
+          child: ListView(
+            physics: const AlwaysScrollableScrollPhysics(),
+            padding: EdgeInsets.all(AppSpacing.lg),
+            children: [
+              _buildStatusHeader(context, created),
+              SizedBox(height: AppSpacing.lg),
+              if (stats.isNotEmpty) ...[
+                _buildPerformanceSection(context, stats),
+                SizedBox(height: AppSpacing.lg),
+                _buildThroughputSection(context, stats),
+                SizedBox(height: AppSpacing.lg),
+                _buildEnvironmentSection(context, stats),
+              ] else
+                _buildNoDataCard(context),
+              SizedBox(height: AppSpacing.xl),
+              _buildChartTimeSelector(context),
+              SizedBox(height: AppSpacing.lg),
+              SystemCharts(
+                records: _chartRecords,
+                loading: _chartsLoading,
+                error: _chartsError,
+                onRetry: () => _loadCharts(),
+                chartTime: _chartTime,
+              ),
+              SizedBox(height: AppSpacing.xxl),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildLoadingSkeleton(BuildContext context) {
+    return ListView(
+      padding: EdgeInsets.all(AppSpacing.lg),
+      children: [
+        // Status header skeleton
+        Card(
+          shape: RoundedRectangleBorder(borderRadius: AppRadius.largeBorderRadius),
+          child: Padding(
+            padding: EdgeInsets.all(AppSpacing.xl),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    const SkeletonLoader(width: 120, height: 24),
+                    const Spacer(),
+                    SkeletonLoader(width: 80, height: 28, borderRadius: AppRadius.circular),
+                  ],
+                ),
+                SizedBox(height: AppSpacing.lg),
+                const SkeletonLoader(width: 200, height: 16),
+                SizedBox(height: AppSpacing.md),
+                const SkeletonLoader(width: 160, height: 14),
+              ],
+            ),
+          ),
+        ),
+        SizedBox(height: AppSpacing.lg),
+        // Performance section skeleton
+        Card(
+          shape: RoundedRectangleBorder(borderRadius: AppRadius.largeBorderRadius),
+          child: Padding(
+            padding: EdgeInsets.all(AppSpacing.xl),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const SkeletonLoader(width: 140, height: 20),
+                SizedBox(height: AppSpacing.xl),
+                Wrap(
+                  spacing: AppSpacing.lg,
+                  runSpacing: AppSpacing.lg,
+                  children: List.generate(4, (_) => const _MetricGaugeSkeleton()),
+                ),
+              ],
+            ),
+          ),
+        ),
+        SizedBox(height: AppSpacing.lg),
+        // Throughput section skeleton
+        Card(
+          shape: RoundedRectangleBorder(borderRadius: AppRadius.largeBorderRadius),
+          child: Padding(
+            padding: EdgeInsets.all(AppSpacing.xl),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const SkeletonLoader(width: 120, height: 20),
+                SizedBox(height: AppSpacing.xl),
+                Wrap(
+                  spacing: AppSpacing.md,
+                  runSpacing: AppSpacing.md,
+                  children: List.generate(4, (_) => const SkeletonLoader(width: 150, height: 56, borderRadius: AppRadius.medium)),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildErrorState(BuildContext context) {
+    final theme = Theme.of(context);
+    return Center(
+      child: Padding(
+        padding: EdgeInsets.all(AppSpacing.xxl),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              padding: EdgeInsets.all(AppSpacing.lg),
+              decoration: BoxDecoration(
+                color: AppColors.errorLight,
+                shape: BoxShape.circle,
+              ),
+              child: Icon(Icons.error_outline, size: 48, color: AppColors.error),
+            ),
+            SizedBox(height: AppSpacing.lg),
+            Text('Failed to load stats', style: theme.textTheme.titleMedium),
+            SizedBox(height: AppSpacing.sm),
+            Text(
+              'Pull down to refresh',
+              style: theme.textTheme.bodyMedium?.copyWith(
+                color: theme.colorScheme.onSurfaceVariant,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildStatusHeader(BuildContext context, String? lastUpdated) {
+    final theme = Theme.of(context);
+    final statusColor = AppColors.getStatusColor(widget.system.status);
+    final uptime = _latest != null
+        ? _formatDuration((_latest!.data['stats'] as Map?)?['uptime'] ?? (_latest!.data['stats'] as Map?)?['uptime_seconds'])
+        : null;
+
+    return Card(
+      elevation: 0,
+      shape: RoundedRectangleBorder(borderRadius: AppRadius.largeBorderRadius),
+      color: theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.5),
+      child: Padding(
+        padding: EdgeInsets.all(AppSpacing.xl),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Icon(Icons.dns, size: 20, color: theme.colorScheme.primary),
+                          SizedBox(width: AppSpacing.sm),
+                          Expanded(
+                            child: Text(
+                              '${widget.system.host}:${widget.system.port}',
+                              style: theme.textTheme.bodyLarge?.copyWith(fontWeight: FontWeight.w500),
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                        ],
+                      ),
+                      if (widget.system.info['group'] != null) ...[
+                        SizedBox(height: AppSpacing.sm),
+                        Row(
+                          children: [
+                            Icon(Icons.folder_outlined, size: 16, color: theme.colorScheme.onSurfaceVariant),
+                            SizedBox(width: AppSpacing.xs),
+                            Text(
+                              widget.system.info['group'].toString(),
+                              style: theme.textTheme.bodySmall?.copyWith(
+                                color: theme.colorScheme.onSurfaceVariant,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+                _StatusBadge(status: widget.system.status, color: statusColor),
+              ],
+            ),
+            SizedBox(height: AppSpacing.lg),
+            Divider(height: 1, color: theme.colorScheme.outlineVariant),
+            SizedBox(height: AppSpacing.lg),
+            Wrap(
+              spacing: AppSpacing.xl,
+              runSpacing: AppSpacing.md,
+              children: [
+                if (widget.system.version != null && widget.system.version!.isNotEmpty)
+                  _QuickInfo(icon: Icons.memory, label: 'Agent', value: widget.system.version!),
+                if (uptime != null)
+                  _QuickInfo(icon: Icons.schedule_outlined, label: 'Uptime', value: uptime),
+                if (lastUpdated != null)
+                  _QuickInfo(icon: Icons.update, label: 'Updated', value: _formatTimestamp(lastUpdated)),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildPerformanceSection(BuildContext context, Map<String, dynamic> stats) {
+    final theme = Theme.of(context);
+    final cpuPercent = _percent(stats['cpu']);
+    final memPercent = _percent(stats['mp']);
+    final diskPercent = _percent(stats['dp']);
+    final swapPercent = _percent(stats['sp'] ?? stats['swap']);
+    final memUsed = _formatBytes(stats['mu'] ?? stats['memory_used']);
+    final memTotal = _formatBytes(stats['mt'] ?? stats['memory_total']);
+    final swapUsed = _formatBytes(stats['su'] ?? stats['swap_used']);
+    final swapTotal = _formatBytes(stats['st'] ?? stats['swap_total']);
+
+    return _SectionCard(
+      icon: Icons.speed_outlined,
+      title: 'Performance',
+      iconColor: theme.colorScheme.primary,
+      child: Column(
+        children: [
+          // Main gauges in a responsive grid
+          LayoutBuilder(
+            builder: (context, constraints) {
+              final crossAxisCount = constraints.maxWidth > 500 ? 4 : 2;
+              return GridView.count(
+                crossAxisCount: crossAxisCount,
+                shrinkWrap: true,
+                physics: const NeverScrollableScrollPhysics(),
+                mainAxisSpacing: AppSpacing.lg,
+                crossAxisSpacing: AppSpacing.lg,
+                childAspectRatio: 1.3,
+                children: [
+                  _CircularGauge(
+                    value: cpuPercent,
+                    label: 'CPU',
+                    color: _getGaugeColor(cpuPercent),
+                    icon: Icons.memory,
+                  ),
+                  _CircularGauge(
+                    value: memPercent,
+                    label: 'Memory',
+                    color: _getGaugeColor(memPercent),
+                    icon: Icons.storage,
+                    subtitle: memUsed != null && memTotal != null ? '$memUsed / $memTotal' : null,
+                  ),
+                  _CircularGauge(
+                    value: diskPercent,
+                    label: 'Disk',
+                    color: _getGaugeColor(diskPercent),
+                    icon: Icons.sd_storage,
+                  ),
+                  if (swapPercent > 0)
+                    _CircularGauge(
+                      value: swapPercent,
+                      label: 'Swap',
+                      color: _getGaugeColor(swapPercent),
+                      icon: Icons.swap_vert,
+                      subtitle: swapUsed != null && swapTotal != null ? '$swapUsed / $swapTotal' : null,
+                    )
+                  else
+                    const SizedBox.shrink(),
+                ],
+              );
+            },
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildThroughputSection(BuildContext context, Map<String, dynamic> stats) {
+    final theme = Theme.of(context);
+    final netSent = _num(stats['ns']).toDouble();
+    final netRecv = _num(stats['nr']).toDouble();
+    final diskRead = _num(stats['dr']).toDouble();
+    final diskWrite = _num(stats['dw']).toDouble();
+
+    return _SectionCard(
+      icon: Icons.swap_horiz,
+      title: 'Throughput',
+      iconColor: theme.colorScheme.secondary,
+      child: Row(
+        children: [
+          Expanded(
+            child: Column(
+              children: [
+                _ThroughputTile(
+                  icon: Icons.arrow_upward,
+                  label: 'Network Out',
+                  value: _formatRate(netSent),
+                  color: AppColors.success,
+                ),
+                SizedBox(height: AppSpacing.md),
+                _ThroughputTile(
+                  icon: Icons.arrow_downward,
+                  label: 'Network In',
+                  value: _formatRate(netRecv),
+                  color: theme.colorScheme.primary,
+                ),
+              ],
+            ),
+          ),
+          SizedBox(width: AppSpacing.lg),
+          Expanded(
+            child: Column(
+              children: [
+                _ThroughputTile(
+                  icon: Icons.upload_file,
+                  label: 'Disk Read',
+                  value: _formatRate(diskRead),
+                  color: AppColors.warning,
+                ),
+                SizedBox(height: AppSpacing.md),
+                _ThroughputTile(
+                  icon: Icons.download,
+                  label: 'Disk Write',
+                  value: _formatRate(diskWrite),
+                  color: Colors.purple,
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildEnvironmentSection(BuildContext context, Map<String, dynamic> stats) {
+    final theme = Theme.of(context);
+    final loadAverage = _formatLoad(stats);
+    final temp = stats['temp'] ?? stats['temperature'];
+    final gpuTemp = stats['gpu_temp'] ?? stats['gpuTemperature'];
+    final battery = stats['battery'] ?? stats['battery_percent'];
+
+    final items = <Widget>[];
+    if (loadAverage != '—') {
+      items.add(_EnvironmentChip(icon: Icons.timeline, label: 'Load', value: loadAverage));
+    }
+    if (temp != null) {
+      items.add(_EnvironmentChip(icon: Icons.thermostat, label: 'CPU Temp', value: '$temp°C', color: _getTempColor(temp)));
+    }
+    if (gpuTemp != null) {
+      items.add(_EnvironmentChip(icon: Icons.videocam, label: 'GPU Temp', value: '$gpuTemp°C', color: _getTempColor(gpuTemp)));
+    }
+    if (battery != null) {
+      items.add(_EnvironmentChip(icon: Icons.battery_std, label: 'Battery', value: '${_percent(battery).toStringAsFixed(0)}%'));
+    }
+
+    if (items.isEmpty) return const SizedBox.shrink();
+
+    return _SectionCard(
+      icon: Icons.eco_outlined,
+      title: 'Environment',
+      iconColor: theme.colorScheme.tertiary,
+      child: Wrap(
+        spacing: AppSpacing.md,
+        runSpacing: AppSpacing.md,
+        children: items,
+      ),
+    );
+  }
+
+  Widget _buildNoDataCard(BuildContext context) {
+    final theme = Theme.of(context);
+    return Card(
+      elevation: 0,
+      shape: RoundedRectangleBorder(borderRadius: AppRadius.largeBorderRadius),
+      color: theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.5),
+      child: Padding(
+        padding: EdgeInsets.all(AppSpacing.xxl),
+        child: Column(
+          children: [
+            Icon(Icons.hourglass_empty, size: 48, color: theme.colorScheme.onSurfaceVariant),
+            SizedBox(height: AppSpacing.lg),
+            Text('No metrics yet', style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w600)),
+            SizedBox(height: AppSpacing.sm),
+            Text(
+              'Data will appear here once the agent sends stats.',
+              style: theme.textTheme.bodyMedium?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+              textAlign: TextAlign.center,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildChartTimeSelector(BuildContext context) {
+    final theme = Theme.of(context);
+    return Card(
+      elevation: 0,
+      shape: RoundedRectangleBorder(borderRadius: AppRadius.largeBorderRadius),
+      color: theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.5),
+      child: Padding(
+        padding: EdgeInsets.all(AppSpacing.lg),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(Icons.access_time, size: 18, color: theme.colorScheme.primary),
+                SizedBox(width: AppSpacing.sm),
+                Text('Time Range', style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w600)),
+              ],
+            ),
+            SizedBox(height: AppSpacing.md),
+            SizedBox(
+              width: double.infinity,
+              child: SegmentedButton<String>(
+                segments: const [
+                  ButtonSegment(value: '1m', label: Text('1m')),
+                  ButtonSegment(value: '1h', label: Text('1h')),
+                  ButtonSegment(value: '12h', label: Text('12h')),
+                  ButtonSegment(value: '24h', label: Text('24h')),
+                  ButtonSegment(value: '1w', label: Text('1w')),
+                  ButtonSegment(value: '30d', label: Text('30d')),
+                ],
+                selected: {_chartTime},
+                onSelectionChanged: (Set<String> selection) async {
+                  final newTime = selection.first;
+                  setState(() => _chartTime = newTime);
+                  await _settingsSvc.update((await _settingsSvc.fetchOrCreate()).copyWith(chartTime: newTime));
+                  await _loadCharts();
+                },
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // Helper methods
+  Future<void> _handleRefresh() async {
+    setState(() {
+      _future = _fetchLatestStats(widget.system.id);
+    });
+    await _future;
+    await _loadCharts();
   }
 
   Future<void> _loadCharts() async {
@@ -352,36 +666,32 @@ class _SystemDetailsScreenState extends State<SystemDetailsScreen> {
     }
   }
 
+  Color _getGaugeColor(double value) {
+    if (value >= 90) return AppColors.error;
+    if (value >= 70) return AppColors.warning;
+    return AppColors.success;
+  }
+
+  Color _getTempColor(dynamic temp) {
+    final t = _num(temp).toDouble();
+    if (t >= 80) return AppColors.error;
+    if (t >= 60) return AppColors.warning;
+    return AppColors.success;
+  }
+
   String _formatLoad(Map<String, dynamic> s) {
     final la = s['la'];
     if (la is List && la.length == 3) {
-      return '${la[0]}/${la[1]}/${la[2]}';
+      return '${la[0]} / ${la[1]} / ${la[2]}';
     }
     final l1 = s['l1'];
     final l5 = s['l5'];
     final l15 = s['l15'];
     if (l1 != null && l5 != null && l15 != null) {
-      return '$l1/$l5/$l15';
+      return '$l1 / $l5 / $l15';
     }
     return '—';
   }
-
-  Color _statusColor(String status, BuildContext context) {
-    switch (status) {
-      case 'up':
-        return Colors.green;
-      case 'down':
-        return Colors.redAccent;
-      case 'paused':
-        return Colors.amber;
-      case 'pending':
-        return Theme.of(context).colorScheme.outline;
-      default:
-        return Theme.of(context).colorScheme.outline;
-    }
-  }
-
-  Color _statusOnColor(Color color) => color.computeLuminance() > 0.45 ? Colors.black87 : Colors.white;
 
   double _percent(dynamic value) {
     final numValue = _num(value);
@@ -448,6 +758,20 @@ class _SystemDetailsScreenState extends State<SystemDetailsScreen> {
     return parts.join(' ');
   }
 
+  String _formatTimestamp(String timestamp) {
+    try {
+      final dt = DateTime.parse(timestamp);
+      final now = DateTime.now();
+      final diff = now.difference(dt);
+      if (diff.inSeconds < 60) return 'Just now';
+      if (diff.inMinutes < 60) return '${diff.inMinutes}m ago';
+      if (diff.inHours < 24) return '${diff.inHours}h ago';
+      return '${diff.inDays}d ago';
+    } catch (_) {
+      return timestamp;
+    }
+  }
+
   List<RecordModel> _updateChartRecords(List<RecordModel> current, RecordModel record, String chartTime) {
     final list = List<RecordModel>.from(current);
     final idx = list.indexWhere((r) => r.id == record.id);
@@ -503,108 +827,158 @@ class _SystemDetailsScreenState extends State<SystemDetailsScreen> {
 
   @override
   void dispose() {
+    _fadeController.dispose();
     _statsSub?.cancel();
     _statsSvc.dispose();
     super.dispose();
   }
 }
 
-class _OverviewHeader extends StatelessWidget {
-  const _OverviewHeader({
-    required this.system,
-    required this.statusColor,
-    required this.statusTextColor,
-    this.agentVersion,
-    this.group,
-    this.lastUpdated,
-    this.uptime,
-    this.memorySummary,
+// ============================================================================
+// Supporting Widgets
+// ============================================================================
+
+class _ActionButton extends StatelessWidget {
+  const _ActionButton({
+    required this.icon,
+    required this.tooltip,
+    required this.onPressed,
   });
 
-  final SystemRecord system;
-  final Color statusColor;
-  final Color statusTextColor;
-  final String? agentVersion;
-  final String? group;
-  final String? lastUpdated;
-  final String? uptime;
-  final String? memorySummary;
+  final IconData icon;
+  final String tooltip;
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    return IconButton(
+      icon: Icon(icon),
+      tooltip: tooltip,
+      onPressed: onPressed,
+    );
+  }
+}
+
+class _StatusBadge extends StatelessWidget {
+  const _StatusBadge({required this.status, required this.color});
+
+  final String status;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final textColor = color.computeLuminance() > 0.5 ? Colors.black87 : Colors.white;
+
+    return AnimatedContainer(
+      duration: AppDurations.medium,
+      curve: AppCurves.standard,
+      padding: EdgeInsets.symmetric(horizontal: AppSpacing.md, vertical: AppSpacing.sm),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.15),
+        borderRadius: AppRadius.circularBorderRadius,
+        border: Border.all(color: color.withValues(alpha: 0.4)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            width: 8,
+            height: 8,
+            decoration: BoxDecoration(
+              color: color,
+              shape: BoxShape.circle,
+            ),
+          ),
+          SizedBox(width: AppSpacing.sm),
+          Text(
+            status.toUpperCase(),
+            style: theme.textTheme.labelSmall?.copyWith(
+              color: textColor,
+              fontWeight: FontWeight.w700,
+              letterSpacing: 0.5,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _QuickInfo extends StatelessWidget {
+  const _QuickInfo({required this.icon, required this.label, required this.value});
+
+  final IconData icon;
+  final String label;
+  final String value;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(icon, size: 16, color: theme.colorScheme.onSurfaceVariant),
+        SizedBox(width: AppSpacing.xs),
+        Text(
+          '$label: ',
+          style: theme.textTheme.bodySmall?.copyWith(
+            color: theme.colorScheme.onSurfaceVariant,
+          ),
+        ),
+        Text(
+          value,
+          style: theme.textTheme.bodySmall?.copyWith(fontWeight: FontWeight.w600),
+        ),
+      ],
+    );
+  }
+}
+
+class _SectionCard extends StatelessWidget {
+  const _SectionCard({
+    required this.icon,
+    required this.title,
+    required this.iconColor,
+    required this.child,
+  });
+
+  final IconData icon;
+  final String title;
+  final Color iconColor;
+  final Widget child;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     return Card(
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-      clipBehavior: Clip.antiAlias,
-      child: Container(
-        decoration: BoxDecoration(
-          gradient: LinearGradient(
-            colors: [
-              statusColor.withOpacity(0.18),
-              theme.colorScheme.surfaceVariant.withOpacity(0.06),
-            ],
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-          ),
-        ),
-        padding: const EdgeInsets.all(24),
+      elevation: 0,
+      shape: RoundedRectangleBorder(borderRadius: AppRadius.largeBorderRadius),
+      color: theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.5),
+      child: Padding(
+        padding: EdgeInsets.all(AppSpacing.xl),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        system.name,
-                        style: theme.textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w700),
-                      ),
-                      const SizedBox(height: 6),
-                      Row(
-                        children: [
-                          const Icon(Icons.public, size: 18),
-                          const SizedBox(width: 6),
-                          Text('${system.host}:${system.port}', style: theme.textTheme.bodyMedium),
-                        ],
-                      ),
-                    ],
-                  ),
-                ),
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+                  padding: EdgeInsets.all(AppSpacing.sm),
                   decoration: BoxDecoration(
-                    color: statusColor.withOpacity(0.2),
-                    borderRadius: BorderRadius.circular(999),
-                    border: Border.all(color: statusColor.withOpacity(0.5)),
+                    color: iconColor.withValues(alpha: 0.1),
+                    borderRadius: AppRadius.smallBorderRadius,
                   ),
-                  child: Text(
-                    system.status.toUpperCase(),
-                    style: theme.textTheme.labelSmall?.copyWith(
-                      color: statusTextColor,
-                      fontWeight: FontWeight.w700,
-                      letterSpacing: 0.6,
-                    ),
-                  ),
+                  child: Icon(icon, size: 20, color: iconColor),
+                ),
+                SizedBox(width: AppSpacing.md),
+                Text(
+                  title,
+                  style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w600),
                 ),
               ],
             ),
-            const SizedBox(height: 20),
-            Wrap(
-              spacing: 18,
-              runSpacing: 12,
-              children: [
-                if (agentVersion != null && agentVersion!.isNotEmpty)
-                  _InfoRow(icon: Icons.router, label: 'Agent', value: agentVersion!),
-                if (lastUpdated != null) _InfoRow(icon: Icons.update, label: 'Last update', value: lastUpdated!),
-                if (uptime != null) _InfoRow(icon: Icons.schedule, label: 'Uptime', value: uptime!),
-                if (group != null && group!.isNotEmpty)
-                  _InfoRow(icon: Icons.location_on_outlined, label: 'Group', value: group!),
-                if (memorySummary != null) _InfoRow(icon: Icons.memory, label: 'Memory', value: memorySummary!),
-              ],
-            ),
+            SizedBox(height: AppSpacing.xl),
+            child,
           ],
         ),
       ),
@@ -612,29 +986,140 @@ class _OverviewHeader extends StatelessWidget {
   }
 }
 
-class _InfoRow extends StatelessWidget {
-  const _InfoRow({required this.icon, required this.label, required this.value});
+class _CircularGauge extends StatelessWidget {
+  const _CircularGauge({
+    required this.value,
+    required this.label,
+    required this.color,
+    required this.icon,
+    this.subtitle,
+  });
 
-  final IconData icon;
+  final double value;
   final String label;
-  final String value;
+  final Color color;
+  final IconData icon;
+  final String? subtitle;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    return ConstrainedBox(
-      constraints: const BoxConstraints(minWidth: 160),
+    final clamped = value.clamp(0.0, 100.0);
+
+    return TweenAnimationBuilder<double>(
+      duration: AppDurations.metricGauge,
+      tween: Tween<double>(begin: 0, end: clamped),
+      curve: AppCurves.enter,
+      builder: (context, animated, _) {
+        return Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            SizedBox(
+              width: 72,
+              height: 72,
+              child: Stack(
+                alignment: Alignment.center,
+                children: [
+                  SizedBox(
+                    width: 72,
+                    height: 72,
+                    child: CircularProgressIndicator(
+                      value: animated / 100,
+                      strokeWidth: 6,
+                      backgroundColor: color.withValues(alpha: 0.15),
+                      valueColor: AlwaysStoppedAnimation(color),
+                      strokeCap: StrokeCap.round,
+                    ),
+                  ),
+                  Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        '${animated.toStringAsFixed(0)}%',
+                        style: theme.textTheme.titleMedium?.copyWith(
+                          fontWeight: FontWeight.w700,
+                          color: color,
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+            SizedBox(height: AppSpacing.sm),
+            Text(
+              label,
+              style: theme.textTheme.bodySmall?.copyWith(fontWeight: FontWeight.w600),
+            ),
+            if (subtitle != null) ...[
+              SizedBox(height: 2),
+              Text(
+                subtitle!,
+                style: theme.textTheme.labelSmall?.copyWith(
+                  color: theme.colorScheme.onSurfaceVariant,
+                  fontSize: 10,
+                ),
+                textAlign: TextAlign.center,
+              ),
+            ],
+          ],
+        );
+      },
+    );
+  }
+}
+
+class _ThroughputTile extends StatelessWidget {
+  const _ThroughputTile({
+    required this.icon,
+    required this.label,
+    required this.value,
+    required this.color,
+  });
+
+  final IconData icon;
+  final String label;
+  final String value;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Container(
+      padding: EdgeInsets.all(AppSpacing.md),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.08),
+        borderRadius: AppRadius.mediumBorderRadius,
+        border: Border.all(color: color.withValues(alpha: 0.15)),
+      ),
       child: Row(
-        mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(icon, size: 16, color: theme.colorScheme.onSurfaceVariant),
-          const SizedBox(width: 6),
-          Text('$label: ', style: theme.textTheme.bodySmall?.copyWith(fontWeight: FontWeight.w600)),
-          Flexible(
-            child: Text(
-              value,
-              style: theme.textTheme.bodySmall,
-              overflow: TextOverflow.ellipsis,
+          Container(
+            padding: EdgeInsets.all(AppSpacing.sm),
+            decoration: BoxDecoration(
+              color: color.withValues(alpha: 0.15),
+              borderRadius: AppRadius.smallBorderRadius,
+            ),
+            child: Icon(icon, size: 16, color: color),
+          ),
+          SizedBox(width: AppSpacing.md),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  label,
+                  style: theme.textTheme.labelSmall?.copyWith(
+                    color: theme.colorScheme.onSurfaceVariant,
+                  ),
+                ),
+                Text(
+                  value,
+                  style: theme.textTheme.bodyMedium?.copyWith(
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ],
             ),
           ),
         ],
@@ -643,101 +1128,51 @@ class _InfoRow extends StatelessWidget {
   }
 }
 
-class _MetricGauge extends StatelessWidget {
-  const _MetricGauge({
+class _EnvironmentChip extends StatelessWidget {
+  const _EnvironmentChip({
     required this.icon,
-    required this.color,
     required this.label,
     required this.value,
+    this.color,
   });
 
   final IconData icon;
-  final Color color;
-  final String label;
-  final double value;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final clamped = value.clamp(0, 100);
-    return SizedBox(
-      width: 200,
-      child: TweenAnimationBuilder<double>(
-        duration: const Duration(milliseconds: 420),
-        tween: Tween<double>(begin: 0, end: clamped.toDouble()),
-        curve: Curves.easeOutCubic,
-        builder: (context, animated, _) {
-          final progress = (animated / 100).clamp(0.0, 1.0);
-          return Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  Icon(icon, size: 18, color: color),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      label,
-                      style: theme.textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w600),
-                    ),
-                  ),
-                  Text(
-                    '${animated.toStringAsFixed(0)}%',
-                    style: theme.textTheme.labelMedium?.copyWith(fontWeight: FontWeight.w700),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 6),
-              ClipRRect(
-                borderRadius: BorderRadius.circular(6),
-                child: LinearProgressIndicator(
-                  value: progress,
-                  minHeight: 6,
-                  color: color,
-                  backgroundColor: color.withOpacity(0.18),
-                ),
-              ),
-            ],
-          );
-        },
-      ),
-    );
-  }
-}
-
-class _MiniStat extends StatelessWidget {
-  const _MiniStat({
-    required this.label,
-    required this.value,
-    required this.icon,
-    required this.color,
-  });
-
   final String label;
   final String value;
-  final IconData icon;
-  final Color color;
+  final Color? color;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final chipColor = color ?? theme.colorScheme.primary;
+
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+      padding: EdgeInsets.symmetric(horizontal: AppSpacing.md, vertical: AppSpacing.sm),
       decoration: BoxDecoration(
-        color: color.withOpacity(0.08),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: color.withOpacity(0.2)),
+        color: chipColor.withValues(alpha: 0.08),
+        borderRadius: AppRadius.mediumBorderRadius,
+        border: Border.all(color: chipColor.withValues(alpha: 0.15)),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(icon, size: 16, color: color),
-          const SizedBox(width: 8),
+          Icon(icon, size: 16, color: chipColor),
+          SizedBox(width: AppSpacing.sm),
           Column(
             crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
             children: [
-              Text(label, style: theme.textTheme.bodySmall?.copyWith(fontWeight: FontWeight.w600, color: color)),
-              Text(value, style: theme.textTheme.bodySmall),
+              Text(
+                label,
+                style: theme.textTheme.labelSmall?.copyWith(
+                  color: theme.colorScheme.onSurfaceVariant,
+                  fontSize: 10,
+                ),
+              ),
+              Text(
+                value,
+                style: theme.textTheme.bodySmall?.copyWith(fontWeight: FontWeight.w600),
+              ),
             ],
           ),
         ],
@@ -746,41 +1181,18 @@ class _MiniStat extends StatelessWidget {
   }
 }
 
-class _InfoPill extends StatelessWidget {
-  const _InfoPill({
-    required this.icon,
-    required this.label,
-    required this.value,
-    required this.color,
-  });
-
-  final IconData icon;
-  final String label;
-  final String value;
-  final Color color;
+class _MetricGaugeSkeleton extends StatelessWidget {
+  const _MetricGaugeSkeleton();
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-      decoration: BoxDecoration(
-        color: color.withOpacity(0.1),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: color.withOpacity(0.18)),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
+    return SizedBox(
+      width: 100,
+      child: Column(
         children: [
-          Icon(icon, size: 18, color: color),
-          const SizedBox(width: 8),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(label, style: theme.textTheme.bodySmall?.copyWith(fontWeight: FontWeight.w600, color: color)),
-              Text(value, style: theme.textTheme.bodySmall),
-            ],
-          ),
+          SkeletonLoader.circular(size: 72),
+          SizedBox(height: AppSpacing.sm),
+          const SkeletonLoader(width: 60, height: 14),
         ],
       ),
     );

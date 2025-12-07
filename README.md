@@ -1,234 +1,180 @@
-# Beszel Mobile
+<p align="center">
+  <img src="assets/icon/app_logo.png" width="120" alt="Beszel Mobile Logo">
+</p>
 
-Beszel Mobile is a Flutter-based Android application that provides comprehensive system monitoring and management capabilities. The application connects to a Beszel Hub instance via PocketBase, enabling real-time monitoring of system resources, containers, services, and alerts.
+<h1 align="center">Beszel Mobile</h1>
+
+<p align="center">
+  <strong>A lightweight, real-time server monitoring companion for <a href="https://github.com/henrygd/beszel">Beszel</a></strong>
+</p>
+
+<p align="center">
+  <a href="https://flutter.dev"><img src="https://img.shields.io/badge/Flutter-3.19+-02569B?logo=flutter" alt="Flutter"></a>
+  <a href="https://dart.dev"><img src="https://img.shields.io/badge/Dart-3.0+-0175C2?logo=dart" alt="Dart"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-green.svg" alt="License"></a>
+</p>
+
+<p align="center">
+  <a href="#features">Features</a> •
+  <a href="#screenshots">Screenshots</a> •
+  <a href="#installation">Installation</a> •
+  <a href="#building">Building</a> •
+  <a href="#architecture">Architecture</a> •
+  <a href="#contributing">Contributing</a>
+</p>
+
+---
 
 ## Overview
 
-Beszel Mobile offers a native mobile interface for the Beszel monitoring platform, allowing administrators and operators to monitor infrastructure health, manage alerts, and access system information from Android devices. The application provides feature parity with the web interface while leveraging mobile-specific UI patterns and interactions.
+Beszel Mobile is a cross-platform Flutter application that provides real-time monitoring of your server infrastructure through the [Beszel](https://github.com/henrygd/beszel) backend. Monitor CPU, memory, disk usage, network throughput, and Docker containers—all from your mobile device.
 
 ## Features
 
-### System Monitoring
+- **Real-time Monitoring** — Live updates via WebSocket subscriptions
+- **Fleet Dashboard** — At-a-glance health status of your entire infrastructure
+- **System Details** — Deep dive into individual server metrics with historical charts
+- **Container Management** — Monitor Docker containers with CPU, memory, and network stats
+- **Alert System** — View and manage active alerts across your fleet
+- **Dark/Light Theme** — Adaptive theming with smooth transitions
+- **Offline Support** — Cached data for offline viewing
+- **Cross-Platform** — Android, iOS, Web, macOS, Windows, Linux
 
-- Real-time system status and health metrics
-- CPU, memory, disk, and network utilization tracking
-- Historical performance charts with configurable time ranges
-- Per-core CPU breakdown and per-interface network statistics
-- GPU power monitoring and temperature tracking
-- Load average visualization
-- Swap memory usage tracking
-- Battery status monitoring
+## Screenshots
 
-### Alert Management
-
-- Active alerts dashboard with real-time updates
-- Alert history per system
-- Configurable alert thresholds for CPU, memory, disk, network, temperature, load, swap, and GPU
-- Customizable alert duration requirements
-- Email and webhook notification configuration
-- Alert status tracking and resolution
-
-### Container Management
-
-- Docker container listing and status monitoring
-- Container resource usage metrics (CPU, memory, network)
-- Container logs viewing
-- Container details and configuration information
-- Health status indicators
-
-### System Services
-
-- Systemd service listing and management
-- Service status monitoring
-- Service details and configuration viewing
-- Service control operations
-
-### Storage Health
-
-- S.M.A.R.T. data retrieval and display
-- Disk health monitoring
-- Storage attribute tracking
-- Disk information and statistics
-
-### Authentication and Security
-
-- Email and password authentication
-- One-time password (OTP) login support
-- Password reset functionality
-- Token-based agent authentication
-- Fingerprint management for system registration
-- Universal token support for agent self-registration
-
-### Configuration
-
-- Configurable Beszel Hub base URL
-- Theme selection (light, dark, system)
-- Chart time range preferences
-- Unit format preferences (temperature, network, disk)
-- Notification destination management
-- YAML configuration export (admin only)
-
-## Requirements
-
-- Flutter SDK 3.9.2 or higher
-- Dart SDK 3.9.2 or higher
-- Android SDK (minimum API level 21)
-- Active Beszel Hub instance with PocketBase backend
+<!-- Add your screenshots here -->
+<!-- 
+<p align="center">
+  <img src="screenshots/dashboard.png" width="200">
+  <img src="screenshots/systems.png" width="200">
+  <img src="screenshots/details.png" width="200">
+  <img src="screenshots/containers.png" width="200">
+</p>
+-->
 
 ## Installation
 
 ### Prerequisites
 
-1. Install Flutter by following the [official installation guide](https://docs.flutter.dev/get-started/install)
-2. Verify installation by running `flutter doctor`
-3. Ensure Android development environment is properly configured
+- [Flutter SDK](https://docs.flutter.dev/get-started/install) 3.19+
+- A running [Beszel](https://github.com/henrygd/beszel) instance
 
-### Building the Application
+### Quick Start
 
-1. Clone the repository:
-   ```bash
-   git clone <repository-url>
-   cd beszel
-   ```
+```bash
+# Clone the repository
+git clone https://github.com/springmusk026/beszel-mobile.git
+cd beszel-mobile
 
-2. Install dependencies:
-   ```bash
-   flutter pub get
-   ```
+# Install dependencies
+flutter pub get
 
-3. Build the Android APK:
-   ```bash
-   flutter build apk
-   ```
+# Run the app
+flutter run
+```
 
-   For a release build:
-   ```bash
-   flutter build apk --release
-   ```
+## Building
 
-4. Install on a connected device:
-   ```bash
-   flutter install
-   ```
+### Android
 
-### Development Setup
+```bash
+flutter build apk --release
+# Output: build/app/outputs/flutter-apk/app-release.apk
+```
 
-1. Ensure your development environment meets the requirements listed above
-2. Connect an Android device or start an emulator
-3. Run the application in debug mode:
-   ```bash
-   flutter run
-   ```
+### iOS
 
-## Configuration
+```bash
+flutter build ios --release
+# Then archive via Xcode
+```
 
-### Initial Setup
+### Web
 
-On first launch, the application will prompt for the Beszel Hub base URL. Enter the full URL of your Beszel Hub instance (e.g., `https://beszel.example.com`).
-
-### Authentication
-
-The application supports multiple authentication methods:
-
-- **Email/Password**: Standard email and password authentication
-- **OTP Login**: One-time password authentication via email
-- **Password Reset**: Self-service password reset functionality
-
-### Server Connection
-
-The base URL can be configured or changed at any time through Settings > Server Connection. Changing the base URL will log out the current session and require re-authentication.
+```bash
+flutter build web --release
+# Output: build/web/
+```
 
 ## Architecture
 
-### Project Structure
-
 ```
 lib/
-├── api/              # PocketBase client configuration
-├── models/           # Data models and DTOs
-├── screens/          # Application screens and UI
-├── services/         # Business logic and API services
-├── theme/            # Theme configuration and management
-└── widgets/          # Reusable UI components
+├── api/                    # API client (PocketBase)
+├── animations/             # Animation utilities & transitions
+│   ├── app_curves.dart
+│   ├── app_durations.dart
+│   ├── dialog_transitions.dart
+│   ├── page_transitions.dart
+│   └── staggered_animation_mixin.dart
+├── models/                 # Data models
+├── navigation/             # Navigation components
+├── screens/                # UI screens
+│   ├── home_overview_screen.dart
+│   ├── systems_screen.dart
+│   ├── system_details_screen.dart
+│   ├── containers_screen.dart
+│   └── ...
+├── services/               # Business logic & data services
+├── theme/                  # Design system tokens
+│   ├── app_colors.dart
+│   ├── app_radius.dart
+│   ├── app_spacing.dart
+│   └── app_typography.dart
+├── widgets/                # Reusable UI components
+└── main.dart
 ```
 
-### Key Components
+### Design System
 
-- **PocketBase Client**: Manages connection to the Beszel Hub backend
-- **Services Layer**: Handles data fetching, real-time subscriptions, and business logic
-- **State Management**: Uses StreamBuilder and FutureBuilder for reactive UI updates
-- **Theme System**: Supports light, dark, and system theme modes
+The app implements a comprehensive design system with:
 
-### Real-time Updates
+| Token | Purpose |
+|-------|---------|
+| `AppColors` | Semantic color palette with light/dark variants |
+| `AppSpacing` | Consistent spacing scale (4, 8, 12, 16, 24, 32) |
+| `AppRadius` | Border radius tokens (8, 12, 16, 24) |
+| `AppDurations` | Animation timing (100ms - 600ms) |
+| `AppCurves` | Easing curves for smooth animations |
 
-The application leverages PocketBase real-time subscriptions to provide live updates for:
-- System status and metrics
-- Active alerts
-- Container status
-- Service status
+### Key Technologies
 
-## Dependencies
+- **Flutter** — Cross-platform UI framework
+- **PocketBase SDK** — Backend communication & real-time subscriptions
+- **fl_chart** — Beautiful, animated charts
+- **SharedPreferences** — Local settings persistence
 
-- `pocketbase`: Backend API client and real-time subscriptions
-- `shared_preferences`: Local storage for user preferences and configuration
-- `fl_chart`: Chart rendering for system metrics visualization
+## Configuration
 
-## Development
+On first launch, enter your Beszel server URL and credentials:
 
-### Code Style
-
-The project follows Flutter and Dart style guidelines. Run the following commands to ensure code quality:
-
-```bash
-flutter analyze
-flutter format .
 ```
-
-### Testing
-
-Run tests using:
-
-```bash
-flutter test
+Server URL: https://your-beszel-instance.com
+Email: your@email.com
+Password: ********
 ```
-
-## Troubleshooting
-
-### Connection Issues
-
-If the application cannot connect to the Beszel Hub:
-
-1. Verify the base URL is correct and accessible
-2. Ensure the Beszel Hub instance is running and reachable
-3. Check network connectivity on the device
-4. Verify authentication credentials are correct
-
-### Real-time Updates Not Working
-
-If real-time updates are not appearing:
-
-1. Verify the PocketBase connection is active
-2. Check that the user has appropriate permissions
-3. Ensure the backend supports real-time subscriptions
-4. Review application logs for subscription errors
-
-### Build Issues
-
-If encountering build errors:
-
-1. Run `flutter clean` to clear build artifacts
-2. Execute `flutter pub get` to refresh dependencies
-3. Verify Flutter and Dart SDK versions meet requirements
-4. Check that all required Android SDK components are installed
-
-## License
-
-[Specify license information]
 
 ## Contributing
 
-[Specify contribution guidelines if applicable]
+Contributions are welcome! Please read our contributing guidelines before submitting PRs.
 
-## Support
+1. Fork the repository
+2. Create your feature branch (`git checkout -b feature/amazing-feature`)
+3. Commit your changes (`git commit -m 'Add amazing feature'`)
+4. Push to the branch (`git push origin feature/amazing-feature`)
+5. Open a Pull Request
 
-For issues, questions, or feature requests, please refer to the project's issue tracker or contact the development team.
+## Related Projects
+
+- [Beszel](https://github.com/henrygd/beszel) — The server monitoring backend
+- [Beszel Agent](https://github.com/henrygd/beszel) — Lightweight agent for collecting metrics
+
+## License
+
+This project is licensed under the MIT License — see the [LICENSE](LICENSE) file for details.
+
+---
+
+<p align="center">
+  Made with ❤️ by <a href="https://github.com/springmusk026">springmusk026</a>
+</p>

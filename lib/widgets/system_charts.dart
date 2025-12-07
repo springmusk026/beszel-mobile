@@ -4,7 +4,10 @@ import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
 import 'package:pocketbase/pocketbase.dart';
 
-class SystemCharts extends StatelessWidget {
+import '../animations/app_curves.dart';
+import '../animations/app_durations.dart';
+
+class SystemCharts extends StatefulWidget {
   const SystemCharts({
     super.key,
     required this.records,
@@ -21,24 +24,31 @@ class SystemCharts extends StatelessWidget {
   final String chartTime;
 
   @override
+  State<SystemCharts> createState() => _SystemChartsState();
+}
+
+class _SystemChartsState extends State<SystemCharts> {
+  // Note: Animation is handled by AnimatedSwitcher and fl_chart's built-in animation
+
+  @override
   Widget build(BuildContext context) {
-    if (loading && records.isEmpty) {
+    if (widget.loading && widget.records.isEmpty) {
       return const Center(child: CircularProgressIndicator());
     }
-    if (error != null && records.isEmpty) {
+    if (widget.error != null && widget.records.isEmpty) {
       return Column(
         children: [
-          Text(error!, style: const TextStyle(color: Colors.red)),
+          Text(widget.error!, style: const TextStyle(color: Colors.red)),
           const SizedBox(height: 8),
-          ElevatedButton(onPressed: onRetry, child: const Text('Retry')),
+          ElevatedButton(onPressed: widget.onRetry, child: const Text('Retry')),
         ],
       );
     }
-    if (records.isEmpty) {
+    if (widget.records.isEmpty) {
       return const Text('No chart data available');
     }
 
-    final entries = _buildEntries(records);
+    final entries = _buildEntries(widget.records);
     if (entries.isEmpty) {
       return const Text('No chart data available');
     }
@@ -46,10 +56,22 @@ class SystemCharts extends StatelessWidget {
     final latestStats = entries.isNotEmpty ? entries.last.stats : <String, dynamic>{};
     final baseTime = entries.first.time;
     
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text('Charts (${_labelForChartTime(chartTime)})', style: theme.textTheme.titleMedium),
+    // Wrap in AnimatedSwitcher for cross-fade when time range changes
+    return AnimatedSwitcher(
+      duration: AppDurations.medium, // 300ms cross-fade
+      switchInCurve: AppCurves.enter,
+      switchOutCurve: AppCurves.exit,
+      transitionBuilder: (Widget child, Animation<double> animation) {
+        return FadeTransition(
+          opacity: animation,
+          child: child,
+        );
+      },
+      child: Column(
+        key: ValueKey<String>(widget.chartTime), // Key by chart time for cross-fade
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text('Charts (${_labelForChartTime(widget.chartTime)})', style: theme.textTheme.titleMedium),
         const SizedBox(height: 12),
         _chartCard(
           context,
@@ -59,6 +81,7 @@ class SystemCharts extends StatelessWidget {
           maxY: 100,
           baseTime: baseTime,
           ySuffix: '%',
+          index: 0,
         ),
         const SizedBox(height: 12),
         _chartCard(
@@ -69,6 +92,7 @@ class SystemCharts extends StatelessWidget {
           maxY: 100,
           baseTime: baseTime,
           ySuffix: '%',
+          index: 1,
         ),
         const SizedBox(height: 12),
         _chartCard(
@@ -79,6 +103,7 @@ class SystemCharts extends StatelessWidget {
           maxY: 100,
           baseTime: baseTime,
           ySuffix: '%',
+          index: 2,
         ),
         const SizedBox(height: 12),
         _multiChartCard(
@@ -91,6 +116,7 @@ class SystemCharts extends StatelessWidget {
           baseTime: baseTime,
           ySuffix: ' MB/s',
           leftFractionDigits: 1,
+          index: 3,
         ),
         // Swap chart
         if ((latestStats['su'] as num?) != null && (latestStats['su'] as num) > 0) ...[
@@ -106,6 +132,7 @@ class SystemCharts extends StatelessWidget {
             baseTime: baseTime,
             leftFractionDigits: 1,
             ySuffix: ' GB',
+            index: 4,
           ),
         ],
         // CPU cores chart
@@ -117,6 +144,7 @@ class SystemCharts extends StatelessWidget {
             series: _cpuCoreSeries(entries),
             baseTime: baseTime,
             ySuffix: '%',
+            index: 5,
           ),
         ],
         // Load Average chart
@@ -128,12 +156,13 @@ class SystemCharts extends StatelessWidget {
             series: _loadAverageSeries(entries),
             baseTime: baseTime,
             leftFractionDigits: 2,
+            index: 6,
           ),
         ],
         // Temperature chart
         if (latestStats['t'] is Map && (latestStats['t'] as Map).isNotEmpty) ...[
           const SizedBox(height: 12),
-          _temperatureChart(context, entries, latestStats['t'] as Map, baseTime),
+          _temperatureChart(context, entries, latestStats['t'] as Map, baseTime, index: 7),
         ],
         // Network interfaces chart
         if (_hasNetworkInterfaces(latestStats)) ...[
@@ -145,6 +174,7 @@ class SystemCharts extends StatelessWidget {
             baseTime: baseTime,
             ySuffix: ' MB/s',
             leftFractionDigits: 1,
+            index: 8,
           ),
           const SizedBox(height: 12),
           _multiChartCard(
@@ -154,6 +184,7 @@ class SystemCharts extends StatelessWidget {
             baseTime: baseTime,
             ySuffix: ' MB/s',
             leftFractionDigits: 1,
+            index: 9,
           ),
           const SizedBox(height: 12),
           _multiChartCard(
@@ -163,6 +194,7 @@ class SystemCharts extends StatelessWidget {
             baseTime: baseTime,
             ySuffix: ' GB',
             leftFractionDigits: 2,
+            index: 10,
           ),
           const SizedBox(height: 12),
           _multiChartCard(
@@ -172,12 +204,13 @@ class SystemCharts extends StatelessWidget {
             baseTime: baseTime,
             ySuffix: ' GB',
             leftFractionDigits: 2,
+            index: 11,
           ),
         ],
         // GPU Power chart
         if (_hasGpuPower(latestStats)) ...[
           const SizedBox(height: 12),
-          _gpuPowerChart(context, entries, baseTime),
+          _gpuPowerChart(context, entries, baseTime, index: 12),
         ],
         // Battery chart
         if (latestStats['bat'] is List && (latestStats['bat'] as List).isNotEmpty) ...[
@@ -194,9 +227,11 @@ class SystemCharts extends StatelessWidget {
             maxY: 100,
             baseTime: baseTime,
             ySuffix: '%',
+            index: 13,
           ),
         ],
-      ],
+        ],
+      ),
     );
   }
 
@@ -272,13 +307,17 @@ class SystemCharts extends StatelessWidget {
     String? ySuffix,
     int leftFractionDigits = 0,
     int? tooltipFractionDigits,
+    int index = 0,
   }) {
     final scheme = Theme.of(context).colorScheme;
     if (spots.isEmpty) {
-      return Card(
-        child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: Text('$title: no data', style: Theme.of(context).textTheme.bodyMedium),
+      return _AnimatedChartCard(
+        index: index,
+        child: Card(
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Text('$title: no data', style: Theme.of(context).textTheme.bodyMedium),
+          ),
         ),
       );
     }
@@ -287,71 +326,76 @@ class SystemCharts extends StatelessWidget {
     final maxX = spots.isNotEmpty ? spots.last.x : 1.0;
     final minX = spots.isNotEmpty ? spots.first.x : 0.0;
     final chartMaxX = maxX <= minX ? minX + 1 : maxX;
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(title, style: Theme.of(context).textTheme.titleSmall),
-            const SizedBox(height: 12),
-            SizedBox(
-              height: 160,
-              child: LineChart(
-                LineChartData(
-                  minY: 0,
-                  maxY: computedMaxY,
-                  minX: minX,
-                  maxX: chartMaxX,
-                  gridData: FlGridData(
-                    show: true,
-                    drawVerticalLine: true,
-                    getDrawingVerticalLine: (value) => FlLine(
-                      color: scheme.outlineVariant.withOpacity(.35),
-                      strokeWidth: .5,
-                    ),
-                    getDrawingHorizontalLine: (value) => FlLine(color: scheme.outlineVariant, strokeWidth: .5),
-                  ),
-                  borderData: FlBorderData(show: false),
-                  titlesData: _buildTitlesData(
-                    baseTime: resolvedBase,
-                    maxX: maxX,
+    return _AnimatedChartCard(
+      index: index,
+      child: Card(
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(title, style: Theme.of(context).textTheme.titleSmall),
+              const SizedBox(height: 12),
+              SizedBox(
+                height: 160,
+                child: LineChart(
+                  LineChartData(
+                    minY: 0,
                     maxY: computedMaxY,
-                    scheme: scheme,
-                    leftFractionDigits: leftFractionDigits,
-                    leftFormatter: (value) => _formatLeftValue(
-                      value,
-                      ySuffix,
-                      leftFractionDigits: leftFractionDigits,
+                    minX: minX,
+                    maxX: chartMaxX,
+                    gridData: FlGridData(
+                      show: true,
+                      drawVerticalLine: true,
+                      getDrawingVerticalLine: (value) => FlLine(
+                        color: scheme.outlineVariant.withOpacity(.35),
+                        strokeWidth: .5,
+                      ),
+                      getDrawingHorizontalLine: (value) => FlLine(color: scheme.outlineVariant, strokeWidth: .5),
                     ),
-                  ),
-                  lineTouchData: _buildTouchData(
-                    baseTime: resolvedBase,
-                    ySuffix: ySuffix,
-                    fractionDigits: tooltipFractionDigits ?? leftFractionDigits,
-                    scheme: scheme,
-                  ),
-                  lineBarsData: [
-                    LineChartBarData(
-                      spots: spots,
-                      isCurved: true,
-                      gradient: LinearGradient(colors: [color.withOpacity(.9), color.withOpacity(.6)]),
-                      barWidth: 2,
-                      dotData: const FlDotData(show: false),
-                      belowBarData: BarAreaData(
-                        show: true,
-                        gradient: LinearGradient(
-                          begin: Alignment.topCenter,
-                          end: Alignment.bottomCenter,
-                          colors: [color.withOpacity(.25), color.withOpacity(.05)],
-                        ),
+                    borderData: FlBorderData(show: false),
+                    titlesData: _buildTitlesData(
+                      baseTime: resolvedBase,
+                      maxX: maxX,
+                      maxY: computedMaxY,
+                      scheme: scheme,
+                      leftFractionDigits: leftFractionDigits,
+                      leftFormatter: (value) => _formatLeftValue(
+                        value,
+                        ySuffix,
+                        leftFractionDigits: leftFractionDigits,
                       ),
                     ),
-                  ],
+                    lineTouchData: _buildTouchData(
+                      baseTime: resolvedBase,
+                      ySuffix: ySuffix,
+                      fractionDigits: tooltipFractionDigits ?? leftFractionDigits,
+                      scheme: scheme,
+                    ),
+                    lineBarsData: [
+                      LineChartBarData(
+                        spots: spots,
+                        isCurved: true,
+                        gradient: LinearGradient(colors: [color.withOpacity(.9), color.withOpacity(.6)]),
+                        barWidth: 2,
+                        dotData: const FlDotData(show: false),
+                        belowBarData: BarAreaData(
+                          show: true,
+                          gradient: LinearGradient(
+                            begin: Alignment.topCenter,
+                            end: Alignment.bottomCenter,
+                            colors: [color.withOpacity(.25), color.withOpacity(.05)],
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  duration: AppDurations.slow, // 400ms for smooth value transitions
+                  curve: AppCurves.standard,
                 ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );
@@ -365,13 +409,17 @@ class SystemCharts extends StatelessWidget {
     String? ySuffix,
     int leftFractionDigits = 0,
     int? tooltipFractionDigits,
+    int index = 0,
   }) {
     final filtered = series.where((s) => s.spots.isNotEmpty).toList();
     if (filtered.isEmpty) {
-      return Card(
-        child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: Text('$title: no data', style: Theme.of(context).textTheme.bodyMedium),
+      return _AnimatedChartCard(
+        index: index,
+        child: Card(
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Text('$title: no data', style: Theme.of(context).textTheme.bodyMedium),
+          ),
         ),
       );
     }
@@ -382,89 +430,94 @@ class SystemCharts extends StatelessWidget {
     final minX = filtered.map((s) => s.spots.isNotEmpty ? s.spots.first.x : 0.0).fold<double>(double.infinity, min);
     final safeMinX = minX.isFinite ? minX : 0.0;
     final chartMaxX = maxX <= safeMinX ? safeMinX + 1 : max(maxX, safeMinX + 1);
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(title, style: Theme.of(context).textTheme.titleSmall),
-            const SizedBox(height: 12),
-            SizedBox(
-              height: 160,
-              child: LineChart(
-                LineChartData(
-                  minY: 0,
-                  maxY: maxY == 0 ? 10 : maxY,
-                  minX: safeMinX,
-                  maxX: chartMaxX,
-                  gridData: FlGridData(
-                    show: true,
-                    drawVerticalLine: true,
-                    getDrawingVerticalLine: (value) => FlLine(
-                      color: scheme.outlineVariant.withOpacity(.35),
-                      strokeWidth: .5,
-                    ),
-                    getDrawingHorizontalLine: (value) => FlLine(color: scheme.outlineVariant, strokeWidth: .5),
-                  ),
-                  borderData: FlBorderData(show: false),
-                  titlesData: _buildTitlesData(
-                    baseTime: resolvedBase,
-                    maxX: chartMaxX,
+    return _AnimatedChartCard(
+      index: index,
+      child: Card(
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(title, style: Theme.of(context).textTheme.titleSmall),
+              const SizedBox(height: 12),
+              SizedBox(
+                height: 160,
+                child: LineChart(
+                  LineChartData(
+                    minY: 0,
                     maxY: maxY == 0 ? 10 : maxY,
-                    scheme: scheme,
-                    leftFractionDigits: leftFractionDigits,
-                    leftFormatter: (value) => _formatLeftValue(
-                      value,
-                      ySuffix,
-                      leftFractionDigits: leftFractionDigits,
+                    minX: safeMinX,
+                    maxX: chartMaxX,
+                    gridData: FlGridData(
+                      show: true,
+                      drawVerticalLine: true,
+                      getDrawingVerticalLine: (value) => FlLine(
+                        color: scheme.outlineVariant.withOpacity(.35),
+                        strokeWidth: .5,
+                      ),
+                      getDrawingHorizontalLine: (value) => FlLine(color: scheme.outlineVariant, strokeWidth: .5),
                     ),
-                  ),
-                  lineTouchData: _buildTouchData(
-                    baseTime: resolvedBase,
-                    ySuffix: ySuffix,
-                    fractionDigits: tooltipFractionDigits ?? leftFractionDigits,
-                    scheme: scheme,
-                  ),
-                  lineBarsData: filtered
-                      .map(
-                        (s) => LineChartBarData(
-                          spots: s.spots,
-                          isCurved: true,
-                          gradient: LinearGradient(colors: [s.color.withOpacity(.9), s.color.withOpacity(.6)]),
-                          barWidth: 2,
-                          dotData: const FlDotData(show: false),
-                          belowBarData: BarAreaData(
-                            show: true,
-                            gradient: LinearGradient(
-                              begin: Alignment.topCenter,
-                              end: Alignment.bottomCenter,
-                              colors: [s.color.withOpacity(.25), s.color.withOpacity(.05)],
+                    borderData: FlBorderData(show: false),
+                    titlesData: _buildTitlesData(
+                      baseTime: resolvedBase,
+                      maxX: chartMaxX,
+                      maxY: maxY == 0 ? 10 : maxY,
+                      scheme: scheme,
+                      leftFractionDigits: leftFractionDigits,
+                      leftFormatter: (value) => _formatLeftValue(
+                        value,
+                        ySuffix,
+                        leftFractionDigits: leftFractionDigits,
+                      ),
+                    ),
+                    lineTouchData: _buildTouchData(
+                      baseTime: resolvedBase,
+                      ySuffix: ySuffix,
+                      fractionDigits: tooltipFractionDigits ?? leftFractionDigits,
+                      scheme: scheme,
+                    ),
+                    lineBarsData: filtered
+                        .map(
+                          (s) => LineChartBarData(
+                            spots: s.spots,
+                            isCurved: true,
+                            gradient: LinearGradient(colors: [s.color.withOpacity(.9), s.color.withOpacity(.6)]),
+                            barWidth: 2,
+                            dotData: const FlDotData(show: false),
+                            belowBarData: BarAreaData(
+                              show: true,
+                              gradient: LinearGradient(
+                                begin: Alignment.topCenter,
+                                end: Alignment.bottomCenter,
+                                colors: [s.color.withOpacity(.25), s.color.withOpacity(.05)],
+                              ),
                             ),
                           ),
-                        ),
-                      )
-                      .toList(),
+                        )
+                        .toList(),
+                  ),
+                  duration: AppDurations.slow, // 400ms for smooth value transitions
+                  curve: AppCurves.standard,
                 ),
               ),
-            ),
-            const SizedBox(height: 8),
-            Wrap(
-              spacing: 12,
-              children: filtered
-                  .map(
-                    (s) => Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Container(width: 10, height: 10, color: s.color),
-                        const SizedBox(width: 4),
-                        Text(s.label),
-                      ],
-                    ),
-                  )
-                  .toList(),
-            ),
-          ],
+              const SizedBox(height: 8),
+              Wrap(
+                spacing: 12,
+                children: filtered
+                    .map(
+                      (s) => Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Container(width: 10, height: 10, color: s.color),
+                          const SizedBox(width: 4),
+                          Text(s.label),
+                        ],
+                      ),
+                    )
+                    .toList(),
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -572,8 +625,9 @@ class SystemCharts extends StatelessWidget {
     BuildContext context,
     List<_ChartEntry> entries,
     Map tempSensors,
-    DateTime baseTime,
-  ) {
+    DateTime baseTime, {
+    int index = 0,
+  }) {
     final sensorNames = tempSensors.keys.toList();
     if (sensorNames.isEmpty) return const SizedBox.shrink();
     
@@ -601,10 +655,11 @@ class SystemCharts extends StatelessWidget {
       baseTime: baseTime,
       leftFractionDigits: 1,
       ySuffix: '°C',
+      index: index,
     );
   }
 
-  Widget _gpuPowerChart(BuildContext context, List<_ChartEntry> entries, DateTime baseTime) {
+  Widget _gpuPowerChart(BuildContext context, List<_ChartEntry> entries, DateTime baseTime, {int index = 0}) {
     // Collect all GPU names and their power data
     final gpuData = <String, List<FlSpot>>{};
     
@@ -629,8 +684,8 @@ class SystemCharts extends StatelessWidget {
     if (gpuData.isEmpty) return const SizedBox.shrink();
     
     final series = gpuData.entries.map((e) {
-      final index = gpuData.keys.toList().indexOf(e.key);
-      final hue = (index * 360 / gpuData.length) % 360;
+      final idx = gpuData.keys.toList().indexOf(e.key);
+      final hue = (idx * 360 / gpuData.length) % 360;
       final color = HSVColor.fromAHSV(1.0, hue, 0.65, 0.52).toColor();
       return _ChartSeries('${e.key} Power', color, e.value);
     }).toList();
@@ -641,6 +696,7 @@ class SystemCharts extends StatelessWidget {
       series: series,
       baseTime: baseTime,
       ySuffix: ' W',
+      index: index,
     );
   }
 
@@ -882,6 +938,80 @@ class _ChartSeries {
   final String label;
   final Color color;
   final List<FlSpot> spots;
+}
+
+/// Animated wrapper for chart cards that provides fade-in and slide-up animation
+/// on initial load with staggered delays based on index.
+class _AnimatedChartCard extends StatefulWidget {
+  const _AnimatedChartCard({
+    required this.child,
+    this.index = 0,
+  });
+
+  final Widget child;
+  final int index;
+
+  @override
+  State<_AnimatedChartCard> createState() => _AnimatedChartCardState();
+}
+
+class _AnimatedChartCardState extends State<_AnimatedChartCard>
+    with SingleTickerProviderStateMixin {
+  late AnimationController _controller;
+  late Animation<double> _fadeAnimation;
+  late Animation<Offset> _slideAnimation;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      vsync: this,
+      duration: AppDurations.chart,
+    );
+    
+    _fadeAnimation = Tween<double>(
+      begin: 0.0,
+      end: 1.0,
+    ).animate(CurvedAnimation(
+      parent: _controller,
+      curve: AppCurves.enter,
+    ));
+    
+    _slideAnimation = Tween<Offset>(
+      begin: const Offset(0, 0.1),
+      end: Offset.zero,
+    ).animate(CurvedAnimation(
+      parent: _controller,
+      curve: AppCurves.enter,
+    ));
+    
+    // Stagger the animation start based on index
+    Future.delayed(
+      Duration(milliseconds: widget.index * 100),
+      () {
+        if (mounted) {
+          _controller.forward();
+        }
+      },
+    );
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return FadeTransition(
+      opacity: _fadeAnimation,
+      child: SlideTransition(
+        position: _slideAnimation,
+        child: widget.child,
+      ),
+    );
+  }
 }
 
 

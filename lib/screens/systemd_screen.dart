@@ -4,6 +4,7 @@ import 'package:pocketbase/pocketbase.dart';
 import '../models/system_record.dart';
 import '../services/systemd_service.dart';
 import '../api/pb_client.dart';
+import '../animations/dialog_transitions.dart';
 
 class SystemdScreen extends StatefulWidget {
   const SystemdScreen({super.key, required this.system});
@@ -129,10 +130,11 @@ class _SystemdScreenState extends State<SystemdScreen> {
   }
 
   Future<void> _openDetails(BuildContext context, String serviceName) async {
-    showModalBottomSheet<void>(
+    showEnhancedBottomSheet<void>(
       context: context,
       isScrollControlled: true,
       showDragHandle: true,
+      barrierColor: Colors.black54,
       builder: (context) {
         return FutureBuilder<Map<String, dynamic>>(
           future: pb.send<Map<String, dynamic>>(

@@ -21,6 +21,10 @@ import 'models/system_record.dart';
 import 'services/auth_service.dart';
 import 'api/pb_client.dart';
 import 'theme/theme_controller.dart';
+import 'navigation/animated_navigation_bar.dart';
+import 'animations/app_durations.dart';
+import 'animations/app_curves.dart';
+import 'animations/page_transitions.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -42,78 +46,121 @@ class MyApp extends StatelessWidget {
         return MaterialApp(
           title: 'Beszel',
           themeMode: ThemeController.instance.themeMode.value,
-          theme: ThemeData(
-            colorScheme: ColorScheme.fromSeed(seedColor: Colors.deepPurple, brightness: Brightness.light),
-            useMaterial3: true,
-            cardTheme: const CardThemeData(margin: EdgeInsets.symmetric(vertical: 6)),
-            listTileTheme: const ListTileThemeData(contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 4)),
-          ),
-          darkTheme: ThemeData(
-            colorScheme: ColorScheme.fromSeed(seedColor: Colors.deepPurple, brightness: Brightness.dark),
-            useMaterial3: true,
-            cardTheme: const CardThemeData(margin: EdgeInsets.symmetric(vertical: 6)),
-            listTileTheme: const ListTileThemeData(contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 4)),
-          ),
-          routes: {
-            '/login': (context) => LoginScreen(
-                  onSuccess: () => Navigator.of(context).pushReplacementNamed('/'),
-                ),
-            '/': (_) => const _RootGate(),
-            '/home': (_) => const HomeShell(),
-            '/system': (context) {
-              final args = ModalRoute.of(context)?.settings.arguments;
-              if (args is! SystemRecord) return const SizedBox.shrink();
-              return SystemDetailsScreen(system: args);
-            },
-            '/settings': (_) => const SettingsScreen(),
-            '/settings/tokens': (_) => const SettingsFingerprintsScreen(),
-            '/settings/notifications': (_) => const SettingsNotificationsScreen(),
-            '/settings/server': (_) => const SettingsServerScreen(),
-            '/alerts': (_) => const AlertsScreen(),
-            '/containers': (context) {
-              final args = ModalRoute.of(context)?.settings.arguments;
-              if (args is! SystemRecord) return const SizedBox.shrink();
-              return ContainersScreen(system: args);
-            },
-            '/systemd': (context) {
-              final args = ModalRoute.of(context)?.settings.arguments;
-              if (args is! SystemRecord) return const SizedBox.shrink();
-              return SystemdScreen(system: args);
-            },
-            '/system-alerts': (context) {
-              final args = ModalRoute.of(context)?.settings.arguments;
-              if (args is! SystemRecord) return const SizedBox.shrink();
-              return SystemAlertsScreen(system: args);
-            },
-            '/system-smart': (context) {
-              final args = ModalRoute.of(context)?.settings.arguments;
-              if (args is! SystemRecord) return const SizedBox.shrink();
-              return SystemSmartScreen(system: args);
-            },
-            '/add-system': (context) {
-              final args = ModalRoute.of(context)?.settings.arguments;
-              return AddSystemScreen(system: args is SystemRecord ? args : null);
-            },
-            '/settings/config-yaml': (_) => const SettingsConfigYamlScreen(),
-            '/container-details': (context) {
-              final args = ModalRoute.of(context)?.settings.arguments as Map<String, String>?;
-              if (args == null) return const SizedBox.shrink();
-              return ContainerDetailsScreen(
-                systemId: args['systemId']!,
-                containerId: args['containerId']!,
-                containerName: args['containerName']!,
-              );
-            },
-            '/manage-alerts': (context) {
-              final args = ModalRoute.of(context)?.settings.arguments;
-              if (args is! SystemRecord) return const SizedBox.shrink();
-              return ManageAlertsScreen(system: args);
-            },
-          },
+          // Use enhanced theme configurations from design tokens
+          theme: ThemeController.lightTheme,
+          darkTheme: ThemeController.darkTheme,
+          // Enable animated theme transitions (300ms per requirements)
+          themeAnimationDuration: ThemeController.themeTransitionDuration,
+          themeAnimationCurve: Curves.easeInOutCubic,
+          onGenerateRoute: _generateRoute,
           initialRoute: '/',
         );
       },
     );
+  }
+}
+
+/// Generates routes with custom page transitions.
+/// Uses SlideUpPageRoute for detail screens per Requirements 2.1, 2.2, 2.5.
+Route<dynamic>? _generateRoute(RouteSettings settings) {
+  final args = settings.arguments;
+
+  switch (settings.name) {
+    // Root routes - use standard MaterialPageRoute
+    case '/':
+      return MaterialPageRoute(
+        builder: (_) => const _RootGate(),
+        settings: settings,
+      );
+    case '/login':
+      return MaterialPageRoute(
+        builder: (context) => LoginScreen(
+          onSuccess: () => Navigator.of(context).pushReplacementNamed('/'),
+        ),
+        settings: settings,
+      );
+    case '/home':
+      return MaterialPageRoute(
+        builder: (_) => const HomeShell(),
+        settings: settings,
+      );
+
+    // Detail screens - use SlideUpPageRoute for smooth transitions
+    case '/system':
+      if (args is! SystemRecord) return null;
+      return SlideUpPageRoute(
+        page: SystemDetailsScreen(system: args),
+      );
+    case '/containers':
+      if (args is! SystemRecord) return null;
+      return SlideUpPageRoute(
+        page: ContainersScreen(system: args),
+      );
+    case '/systemd':
+      if (args is! SystemRecord) return null;
+      return SlideUpPageRoute(
+        page: SystemdScreen(system: args),
+      );
+    case '/system-alerts':
+      if (args is! SystemRecord) return null;
+      return SlideUpPageRoute(
+        page: SystemAlertsScreen(system: args),
+      );
+    case '/system-smart':
+      if (args is! SystemRecord) return null;
+      return SlideUpPageRoute(
+        page: SystemSmartScreen(system: args),
+      );
+    case '/container-details':
+      final mapArgs = args as Map<String, String>?;
+      if (mapArgs == null) return null;
+      return SlideUpPageRoute(
+        page: ContainerDetailsScreen(
+          systemId: mapArgs['systemId']!,
+          containerId: mapArgs['containerId']!,
+          containerName: mapArgs['containerName']!,
+        ),
+      );
+    case '/manage-alerts':
+      if (args is! SystemRecord) return null;
+      return SlideUpPageRoute(
+        page: ManageAlertsScreen(system: args),
+      );
+    case '/add-system':
+      return SlideUpPageRoute(
+        page: AddSystemScreen(system: args is SystemRecord ? args : null),
+      );
+
+    // Settings screens - use SlideUpPageRoute for consistency
+    case '/settings':
+      return SlideUpPageRoute(
+        page: const SettingsScreen(),
+      );
+    case '/settings/tokens':
+      return SlideUpPageRoute(
+        page: const SettingsFingerprintsScreen(),
+      );
+    case '/settings/notifications':
+      return SlideUpPageRoute(
+        page: const SettingsNotificationsScreen(),
+      );
+    case '/settings/server':
+      return SlideUpPageRoute(
+        page: const SettingsServerScreen(),
+      );
+    case '/settings/config-yaml':
+      return SlideUpPageRoute(
+        page: const SettingsConfigYamlScreen(),
+      );
+
+    // Alerts screen
+    case '/alerts':
+      return SlideUpPageRoute(
+        page: const AlertsScreen(),
+      );
+
+    default:
+      return null;
   }
 }
 
@@ -181,25 +228,61 @@ class HomeShell extends StatefulWidget {
 class _HomeShellState extends State<HomeShell> {
   int _index = 0;
 
-  final List<Widget> _pages = const [
-    HomeOverviewScreen(),
-    SystemsScreen(),
-    AlertsScreen(),
-    SettingsScreen(),
-  ];
+  // Use a method to get pages to ensure proper key assignment for AnimatedSwitcher
+  Widget _getPage(int index) {
+    switch (index) {
+      case 0:
+        return const HomeOverviewScreen(key: ValueKey('home'));
+      case 1:
+        return const SystemsScreen(key: ValueKey('systems'));
+      case 2:
+        return const AlertsScreen(key: ValueKey('alerts'));
+      case 3:
+        return const SettingsScreen(key: ValueKey('settings'));
+      default:
+        return const HomeOverviewScreen(key: ValueKey('home'));
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: _pages[_index],
-      bottomNavigationBar: NavigationBar(
+      body: AnimatedSwitcher(
+        duration: AppDurations.tabCrossFade, // 200ms cross-fade per Requirements 2.3
+        switchInCurve: AppCurves.enter,
+        switchOutCurve: AppCurves.exit,
+        transitionBuilder: (Widget child, Animation<double> animation) {
+          return FadeTransition(
+            opacity: animation,
+            child: child,
+          );
+        },
+        child: _getPage(_index),
+      ),
+      bottomNavigationBar: AnimatedNavigationBar(
         selectedIndex: _index,
         onDestinationSelected: (i) => setState(() => _index = i),
         destinations: const [
-          NavigationDestination(icon: Icon(Icons.dashboard_outlined), selectedIcon: Icon(Icons.dashboard), label: 'Home'),
-          NavigationDestination(icon: Icon(Icons.computer_outlined), selectedIcon: Icon(Icons.computer), label: 'Systems'),
-          NavigationDestination(icon: Icon(Icons.notifications_outlined), selectedIcon: Icon(Icons.notifications), label: 'Alerts'),
-          NavigationDestination(icon: Icon(Icons.settings_outlined), selectedIcon: Icon(Icons.settings), label: 'Settings'),
+          NavigationDestination(
+            icon: Icon(Icons.dashboard_outlined),
+            selectedIcon: Icon(Icons.dashboard),
+            label: 'Home',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.computer_outlined),
+            selectedIcon: Icon(Icons.computer),
+            label: 'Systems',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.notifications_outlined),
+            selectedIcon: Icon(Icons.notifications),
+            label: 'Alerts',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.settings_outlined),
+            selectedIcon: Icon(Icons.settings),
+            label: 'Settings',
+          ),
         ],
       ),
     );
