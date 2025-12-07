@@ -30,6 +30,29 @@ Beszel Mobile provides real-time visibility into your server infrastructure thro
 
 **Backend:** Beszel server instance (any recent version)
 
+## Screenshots
+
+<p align="center">
+  <img src="assets/ss/1.jpg" width="180">
+  <img src="assets/ss/2.jpg" width="180">
+  <img src="assets/ss/3.jpg" width="180">
+  <img src="assets/ss/4.jpg" width="180">
+</p>
+
+<p align="center">
+  <img src="assets/ss/5.jpg" width="180">
+  <img src="assets/ss/6.jpg" width="180">
+  <img src="assets/ss/7.jpg" width="180">
+  <img src="assets/ss/8.jpg" width="180">
+</p>
+
+<p align="center">
+  <img src="assets/ss/9.jpg" width="180">
+  <img src="assets/ss/10.jpg" width="180">
+  <img src="assets/ss/11.jpg" width="180">
+  <img src="assets/ss/12.jpg" width="180">
+</p>
+
 ## Application Screens
 
 ### Dashboard
